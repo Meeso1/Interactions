@@ -1,7 +1,7 @@
 from __future__ import annotations
 import numpy as np
 import typing
-from typing import List, Dict, Tuple, Optional, Callable, Union
+from typing import List, Dict, Tuple, Optional, Callable, Union, Any
 import abc
 import random
 from scipy import spatial
@@ -18,16 +18,20 @@ class Ball:
     # instance:
     position: np.ndarray
     velocity: np.ndarray
+    attributes: Dict[str, Any]
+    trace: List[Tuple[np.ndarray, np.ndarray]]  # position and velocity log for plotting
 
     def __init__(self, position: np.ndarray, velocity: np.ndarray) -> None:
         self.position = position
         self.velocity = velocity
         self.attributes = {}
+        self.trace = []
 
         Ball.balls.append(self)
 
     def update(self, dt: float) -> None:
         self.position += self.velocity * dt
+        self.trace.append((self.position, self.velocity))
 
     @staticmethod
     def update_all(dt: float) -> None:
@@ -48,12 +52,21 @@ class Field:
     # instance:
     name: str
     values: np.ndarray
+    trace: List[np.ndarray]     # Field values log for plotting and analysis
 
     def __init__(self, name: str, values: np.ndarray) -> None:
         self.name = name
         self.values = values
 
         Field.fields[self.name] = self
+
+    def update(self, dt: float):
+        self.trace.append(self.values)
+
+    @staticmethod
+    def update_all(dt: float):
+        for (key, value) in Field.fields:
+            value.update(dt)
 
 
 class Interaction:
@@ -104,3 +117,11 @@ class Interaction:
     def update_all(dt: float):
         for interaction in Interaction.interactions:
             interaction.update(dt)
+
+
+def simulate(time: float, steps: int):
+    dt: float = time / steps
+    for i in range(n):
+        Ball.update_all(dt)
+        Field.update_all(dt)
+        Interaction.update_all(dt)
