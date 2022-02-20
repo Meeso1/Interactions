@@ -2,41 +2,18 @@ from __future__ import annotations
 import numpy as np
 from typing import List, Dict, Tuple, Optional, Callable, Union, Any
 import random
-import pygame as pg
 from BFIClasses import *
 
+sim = Simulation(
+    [Ball(np.array([445, 300], dtype=float), np.array([0, 0], dtype=float)),
+     Ball(np.array([555, 300], dtype=float), np.array([0, 0], dtype=float)),
+     Ball(np.array([500, 440], dtype=float), np.array([0, -10], dtype=float))],
+    {},
+    [Interaction("Gravity", ("Ball", "Ball"),
+                 lambda target, other_ball: (-5000000/Ball.distance(target[0], other_ball)**3)
+                                            * (target[0].position - other_ball.position),
+                 attribute="velocity", radius=100)],
+    total_time=15, steps_per_second=1000)
 
-def simulate(time: float, steps: int):
-    dt: float = time / steps
-    for i in range(steps):
-        Ball.update_all(dt)
-        Field.update_all(dt)
-        Interaction.update_all(dt)
-
-
-def sim_display(time: float, framerate: int):
-    pg.init()
-    display = pg.display.set_mode((1000, 600))
-    clock = pg.time.Clock()
-    dt: float = 1 / framerate
-
-    while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                return
-
-        Ball.update_all(dt)
-        Field.update_all(dt)
-        Interaction.update_all(dt)
-
-        display.fill((255, 255, 255))
-        for ball in Ball.balls:
-            pg.draw.circle(display, (255, 0, 255), (ball.position[0], ball.position[1]), 10)
-        pg.display.update()
-
-        clock.tick(framerate)
-
-
-Ball(np.array([200, 300], dtype=float), np.array([100, 20], dtype=float))
-sim_display(10, 50)
+disp = SimulationDisplay(sim, 50, 8)
+disp.display_sim()
