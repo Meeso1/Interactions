@@ -95,7 +95,6 @@ class SimulationDisplay:
     ball_color: Color = (255, 0, 255)
     display_size: Tuple[int, int] = (1000, 600)
 
-    sim_size: Tuple[float, float]
     scale: float
 
     simulation: Simulation
@@ -106,9 +105,14 @@ class SimulationDisplay:
     time: float
     frame_num: int
 
+    background_field: str
+    background_field_res: Tuple[int, int]
+
     def __init__(self, simulation: Simulation, fps: int = -1,
                  ball_radius: float = 10,
-                 display_size: Tuple[int, int] = (1000, 600), scale: float = 1):
+                 display_size: Tuple[int, int] = (1000, 600), scale: float = 1,
+                 background_field: str = None,
+                 background_field_res: Tuple[int, int] = (60, 60)):
         if fps > 1 / simulation.dt:
             fps = 1 / simulation.dt
         self.FPS = fps
@@ -121,6 +125,8 @@ class SimulationDisplay:
 
         self.display_size = display_size
         self.scale = scale
+        self.background_field = background_field
+        self.background_field_res = background_field_res
 
     def display_sim(self) -> None:
         pg.init()
@@ -128,17 +134,54 @@ class SimulationDisplay:
         clock = pg.time.Clock()
 
         while True:
+            # Handle pygame events
             for event in pg.event.get():
                 if event.type == pg.QUIT:
                     pg.quit()
                     return
 
+            # Advance the simulation
             if self.simulation.time < self.simulation.total_time:
                 self.simulation.simulate(self.time + self.frame_time)
                 self.time += self.frame_time
                 self.frame_num += 1
 
             display.fill(self.background_color)
+
+            # Display background field
+            # if self.background_field is not None:
+            #     field = self.simulation.fields[self.background_field]
+            #     field_disp_size = int(field.size[0] * self.scale), int(field.size[1] * self.scale)
+            #     values = field.vals(np.linspace(-field.size[0]/2, field.size[0]/2, field_disp_size[1]),
+            #                         np.linspace(-field.size[1]/2, field.size[1]/2, field_disp_size[0]))
+            #    shades = 1/(values*10 + 1)
+            #    p_color = (shades*255).astype(np.ubyte)
+            #    colors = np.dstack([p_color, np.ones(p_color.shape)*255, p_color])
+            #    surf = pg.surfarray.make_surface(colors)
+            #    center = self.pos_to_screen((0, 0))
+            #    display.blit(surf, (center[0] - field_disp_size[0]/2, center[1] - field_disp_size[1]/2))
+
+            if self.background_field is not None:
+                field = self.simulation.fields[self.background_field]
+                field_disp_size = int(field.size[0] * self.scale), int(field.size[1] * self.scale)
+                values = field.vals(np.linspace(-field.size[0]/2, field.size[0]/2, self.background_field_res[1]),
+                                    np.linspace(-field.size[1]/2, field.size[1]/2, self.background_field_res[0]))
+                shades = 1 / (values * 10 + 1)
+                p_color = (shades*255).astype(np.ubyte)
+                colors = np.dstack([p_color, np.ones(p_color.shape)*255, p_color])
+                rect_dim = field_disp_size[0]/self.background_field_res[0], \
+                    field_disp_size[1]/self.background_field_res[1]
+                center = self.pos_to_screen((0, 0))
+                for i in range(self.background_field_res[0]):
+                    for j in range(self.background_field_res[1]):
+                        pg.draw.rect(display, colors[i][j],
+                                     pg.Rect((rect_dim[0]*i + center[0] - field_disp_size[0]/2,
+                                             rect_dim[1]*j + center[1] - field_disp_size[1]/2),
+                                             np.ceil(rect_dim)))
+
+            pg.draw.circle(display, (0, 0, 0), self.pos_to_screen((0, 0)), 3)
+
+            # Display balls
             for ball in self.simulation.balls:
                 pg.draw.circle(display, self.ball_color,
                                self.pos_to_screen((ball.position[0], ball.position[1])),
