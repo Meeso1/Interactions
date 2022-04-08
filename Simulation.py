@@ -17,24 +17,44 @@ class Simulation:
 
     field_res: Tuple[int, int]
     field_size: Tuple[float, float]
+    border_size: Union[Tuple[float, float], None]
+    border_effect: str
 
     dt: float
     total_time: float
     time: float
     step_num: int
 
-    ball_tree: spatial.KDTree
+    ball_tree: spatial.KDTree = None
 
     def __init__(self, start_balls: List[Ball], fields: Dict[str, Field], interactions: List[Interaction],
                  field_res: Tuple[int, int] = (n, n), field_size: Tuple[float, float] = (width, width),
+                 border_size: Union[Tuple[float, float], str] = "auto", border_effect: str = "bounce",
                  steps_per_second: int = 100, total_time: float = 100):
         self.field_res = field_res
         self.field_size = field_size
+        if border_size == "auto":
+            self.border_size = field_size
+        else:
+            self.border_size = border_size
+        if border_effect not in ("bounce", "stop", "contain"):
+            raise Exception(f"Unrecognised border effect: {border_effect}", border_effect)
+        else:
+            self.border_effect = border_effect
 
         self.balls = start_balls
         self.fields = fields
         self.interactions = interactions
 
+        # Setup attr_derivatives for balls
+        for ball in start_balls:
+            ball.attr_derivatives["velocity"] = []
+            if ball.attributes is None:
+                continue
+            for attr in ball.attributes.keys():
+                ball.attr_derivatives[attr] = []
+
+        # Setup field res and size
         for field in fields.values():
             if field.res is None:
                 field.res = field.values.shape
@@ -47,11 +67,19 @@ class Simulation:
         self.time = 0
         self.step_num = 0
 
-        self.ball_tree = Ball.make_tree(self.balls)
+        if len(self.balls) > 0:
+            self.ball_tree = Ball.make_tree(self.balls)
 
     def add_balls(self, new_balls: List[Ball]) -> None:
+        if len(new_balls) <= 0:
+            return
         for ball in new_balls:
             self.balls.append(ball)
+            ball.attr_derivatives["velocity"] = []
+            if ball.attributes is None:
+                continue
+            for attr in ball.attributes.keys():
+                ball.attr_derivatives[attr] = []
         self.ball_tree = Ball.make_tree(self.balls)
 
     def add_fields(self, fields: List[Field]) -> None:
@@ -66,17 +94,58 @@ class Simulation:
         for interaction in interactions:
             self.interactions.append(interaction)
 
+    def check_border(self, ball: Ball) -> None:
+        if self.border_size is None:
+            return
+
+        if ball.position[0] > self.border_size[0]/2:
+            ball.position[0] = self.border_size[0] / 2
+            if self.border_effect == "bounce":
+                ball.velocity[0] = -ball.velocity[0]
+            elif self.border_effect == "stop":
+                ball.velocity[0] = 0
+
+        elif ball.position[0] < -self.border_size[0]/2:
+            ball.position[0] = -self.border_size[0] / 2
+            if self.border_effect == "bounce":
+                ball.velocity[0] = -ball.velocity[0]
+            elif self.border_effect == "stop":
+                ball.velocity[0] = 0
+
+        if ball.position[1] > self.border_size[1]/2:
+            ball.position[1] = self.border_size[1] / 2
+            if self.border_effect == "bounce":
+                ball.velocity[1] = -ball.velocity[1]
+            elif self.border_effect == "stop":
+                ball.velocity[1] = 0
+
+        elif ball.position[1] < -self.border_size[1]/2:
+            ball.position[1] = -self.border_size[1] / 2
+            if self.border_effect == "bounce":
+                ball.velocity[1] = -ball.velocity[1]
+            elif self.border_effect == "stop":
+                ball.velocity[1] = 0
+
     def step(self) -> None:
         if self.time >= self.total_time:
             return
 
+        Interaction.time = self.time
         for ball in self.balls:
             ball.update(self.dt)
-        self.ball_tree = Ball.make_tree(self.balls)
+            self.check_border(ball)
+        if len(self.balls) > 0:
+            self.ball_tree = Ball.make_tree(self.balls)
         for field in self.fields.values():
             field.update(self.dt)
         for interaction in self.interactions:
             interaction.update(self.dt, (self.balls, self.fields), self.ball_tree)
+
+        # Update attrs and vals based on derivatives
+        for ball in self.balls:
+            ball.update_attrs(self.dt)
+        for field in self.fields.values():
+            field.update_val(self.dt)
 
         self.time += self.dt
         self.step_num += 1
@@ -148,27 +217,18 @@ class SimulationDisplay:
 
             display.fill(self.background_color)
 
-            # Display background field
-            # if self.background_field is not None:
-            #     field = self.simulation.fields[self.background_field]
-            #     field_disp_size = int(field.size[0] * self.scale), int(field.size[1] * self.scale)
-            #     values = field.vals(np.linspace(-field.size[0]/2, field.size[0]/2, field_disp_size[1]),
-            #                         np.linspace(-field.size[1]/2, field.size[1]/2, field_disp_size[0]))
-            #    shades = 1/(values*10 + 1)
-            #    p_color = (shades*255).astype(np.ubyte)
-            #    colors = np.dstack([p_color, np.ones(p_color.shape)*255, p_color])
-            #    surf = pg.surfarray.make_surface(colors)
-            #    center = self.pos_to_screen((0, 0))
-            #    display.blit(surf, (center[0] - field_disp_size[0]/2, center[1] - field_disp_size[1]/2))
-
+            # draw background field
             if self.background_field is not None:
                 field = self.simulation.fields[self.background_field]
+                avg = field.values.sum()/field.values.size
                 field_disp_size = int(field.size[0] * self.scale), int(field.size[1] * self.scale)
                 values = field.vals(np.linspace(-field.size[0]/2, field.size[0]/2, self.background_field_res[1]),
                                     np.linspace(-field.size[1]/2, field.size[1]/2, self.background_field_res[0]))
-                shades = 1 / (values * 10 + 1)
+                shades = 1 - 1 / (values / avg + 1)
                 p_color = (shades*255).astype(np.ubyte)
-                colors = np.dstack([p_color, np.ones(p_color.shape)*255, p_color])
+                colors = np.dstack([(255*np.sin(shades*np.pi/2)).astype(np.ubyte),
+                                    (255*(np.sin(shades*np.pi/2)) + np.cos(shades*np.pi/2)/2).astype(np.ubyte),
+                                    (255*np.cos(shades*np.pi/2)).astype(np.ubyte)])
                 rect_dim = field_disp_size[0]/self.background_field_res[0], \
                     field_disp_size[1]/self.background_field_res[1]
                 center = self.pos_to_screen((0, 0))
@@ -179,6 +239,7 @@ class SimulationDisplay:
                                              rect_dim[1]*j + center[1] - field_disp_size[1]/2),
                                              np.ceil(rect_dim)))
 
+            # Center dot
             pg.draw.circle(display, (0, 0, 0), self.pos_to_screen((0, 0)), 3)
 
             # Display balls
