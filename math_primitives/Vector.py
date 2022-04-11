@@ -1,163 +1,186 @@
 from __future__ import annotations
 import numpy as np
-from typing import Union, Type
+from abc import ABC
+from typing import Type, Any, Dict, TypeGuard, Final, TypeAlias
+from numpy.typing import NDArray
 
 
-class VectorBase:
+def is_num(a: Any) -> TypeGuard[int | float]:
+    return isinstance(a, (int, float))
 
-    vector_classes = {}
+
+def is_array(a: Any) -> TypeGuard[NDArray[np.float64]]:
+    return isinstance(a, np.ndarray) and a.dtype in (float, np.float64, int)
 
 
-def Vector(n: int) -> Type:
-    if not isinstance(n, int) or n <= 0:
-        raise Exception(f"Argument must be a positive integer")
+def is_vector(v: Any) -> TypeGuard[Vector]:
+    return isinstance(v, Vector)
 
-    if n in VectorBase.vector_classes:
-        return VectorBase.vector_classes[n]
 
-    class VectorN(VectorBase):
-        def __init__(self, data=np.zeros((n,), dtype=float)) -> None:
+class Vector:
+
+    def __init__(self, data: Any = 2) -> None:
+        self.data: NDArray[np.float64]
+
+        # Make zero Vector with given size
+        if isinstance(data, int):
+            if data > 0:
+                _data = np.zeros((data,), dtype=np.float64)
+            else:
+                raise ValueError("Size of the Vector must be a positive integer")
+        # Copy from Vector
+        elif is_vector(data):
+            _data = data.data
+        # Vector with cords in numpy array
+        elif is_array(data):
             _data = data
-            if isinstance(data, VectorN):
-                _data = data.data
-            # Try to convert to array
-            if not isinstance(data, np.ndarray):
-                try:
-                    _data = np.array(data)
-                except BaseException:
-                    raise Exception(f"Cannot create a Vector{n} from {type(data)}")
-            # Check shape
-            if not _data.shape == (n,):
-                raise Exception(f"Cannot create a Vector{n} from an array of shape {_data.shape}")
-            self.data = _data
+        # Try to convert to array
+        else:
+            try:
+                _data = np.array(data, dtype=np.float64)
+            except BaseException:
+                raise Exception(f"Cannot create a Vector from {type(data)}")
 
-        def __repr__(self) -> str:
-            return self.__str__()
+        self.data = _data
 
-        def __str__(self) -> str:
-            return f"Vector2({str(self.data)})"
+        if self.data.size == 0:
+            raise ValueError(f"""Cannot create a Vector from a 0-sized numpy array: {str(data)}""")
 
-        def __add__(self, other) -> VectorN:
-            if isinstance(other, VectorN):
-                return VectorN(self.data + other.data)
-            return VectorN(self.data + other)
+        self.n: Final[int] = len(self.data)
 
-        def __radd__(self, other) -> VectorN:
-            return self.__add__(other)
+    def __repr__(self) -> str:
+        return self.__str__()
 
-        def __neg__(self) -> VectorN:
-            return VectorN(-self.data)
+    def __str__(self) -> str:
+        return f"Vector{self.n}({str(self.data)})"
 
-        def __sub__(self, other) -> VectorN:
-            return self.__add__(-other)
+    def __add__(self, other: Any) -> Vector:
+        if is_vector(other) and len(self) == len(other):
+            return Vector(self.data + other.data)
+        return Vector(self.data + other)
 
-        def __rsub__(self, other) -> VectorN:
-            return self.__sub__(other)
+    def __radd__(self, other: Any) -> Vector:
+        return self.__add__(other)
 
-        def __mul__(self, other) -> Union[VectorN, float]:
-            if isinstance(other, (int, float)):
-                return VectorN(self.data * other)
-            return self.dot(other)
+    def __neg__(self) -> Vector:
+        return Vector(-self.data)
 
-        def __rmul__(self, other) -> Union[VectorN, float]:
-            return self.__mul__(other)
+    def __sub__(self, other: Any) -> Vector:
+        if is_vector(other):
+            return self + (-other)
+        return self + (-np.array(other, dtype=np.float64))
 
-        def __truediv__(self, other) -> VectorN:
-            if not isinstance(other, (int, float)):
-                raise NotImplementedError()
+    def __rsub__(self, other: Any) -> Vector:
+        return self.__sub__(other)
+
+    def __mul__(self, other: Any) -> Vector | float:
+        if is_num(other):
+            return Vector(self.data * other)
+        return self.dot(other)
+
+    def __rmul__(self, other: Any) -> Vector | float:
+        return self.__mul__(other)
+
+    def __truediv__(self, other: int | float) -> Vector:
+        if is_num(other):
             if other == 0:
                 raise ArithmeticError()
-            return self * (1 / other)
+            r = self * (1 / other)
+            if is_vector(r):  # Always true, added to pass type check
+                return r
+        raise NotImplementedError()
 
-        def __abs__(self) -> float:
-            return self.length()
+    def __abs__(self) -> float:
+        return self.length()
 
-        def __eq__(self, other):
-            _other = other
-            if not isinstance(other, VectorN):
-                _other = VectorN(other)
-            return np.array_equal(self.data, _other.data)
+    def __eq__(self, other: object) -> bool:
+        try:
+            vec = Vector(other)
+            return np.array_equal(self.data, vec.data)
+        except BaseException:
+            return False
 
-        def __len__(self) -> int:
-            return n
+    def __len__(self) -> int:
+        return self.n
 
-        def __getitem__(self, i) -> float:
-            if not isinstance(i, int) or not (0 <= i < n):
-                raise IndexError(f"Incorrect index for Vector{n}: {i}")
-            return self.data[i]
+    def __getitem__(self, i: int) -> float:
+        if not isinstance(i, int) or not (0 <= i < self.n):
+            raise IndexError(f"Incorrect index for Vector{self.n}: {i}")
+        return self.data[i]
 
-        def __setitem__(self, i, val) -> None:
-            if not isinstance(i, int) or not (0 <= i < n):
-                raise IndexError(f"Incorrect index for Vector{n}: {i}")
-            if not isinstance(val, (int, float)):
-                raise TypeError(f"Cannot assign {type(val)} to VectorN coordinate")
-            self.data[i] = val
+    def __setitem__(self, i: int, val: int | float) -> None:
+        if not isinstance(i, int) or not (0 <= i < self.n):
+            raise IndexError(f"Incorrect index for Vector{self.n}: {i}")
+        if not is_num(val):
+            raise TypeError(f"Cannot assign {type(val)} to Vector coordinate")
+        self.data[i] = val
 
-        def length(self) -> float:
-            return np.sqrt(self.dot(self))
+    def length(self) -> float:
+        return np.sqrt(self.dot(self))
 
-        def dot(self, other) -> float:
-            _other = other
-            if not isinstance(other, VectorN):
-                _other = VectorN(other)
-            return sum(_other.data * self.data)
+    def dot(self, other: Any) -> float:
+        if is_vector(other) and len(self) == len(other):
+            return sum(other.data * self.data)
+        v = Vector(other)
+        if len(v) != len(self):
+            raise ValueError(f"Vector lengths don't match: {len(v)} != {len(self)}")
+        return sum(v.data * self.data)
 
-        def normalize(self) -> VectorN:
-            return self / self.length() if not self.length() == 0 else VectorN()
+    def normalize(self) -> Vector:
+        return self / self.length() if not self.length() == 0 else Vector(len(self))
 
-        @classmethod
-        def distance(cls, a, b) -> float:
-            try:
-                _a = VectorN(a)
-                _b = VectorN(b)
-            except BaseException:
-                raise Exception(f"Cannot convert types {type(a)}, {type(b)} to Vector{n}")
-            return (_a-_b).length()
+    @classmethod
+    def distance(cls, a: Any, b: Any) -> float:
+        try:
+            _a = Vector(a)
+            _b = Vector(b)
+        except BaseException:
+            raise Exception(f"Cannot convert types {type(a)}, {type(b)} to Vector")
+        return (_a - _b).length()
 
-        @property
-        def x(self):
-            return self[0]
+    @property
+    def x(self):
+        return self[0]
 
-        @x.getter
-        def x(self):
-            return self[0]
+    @x.getter
+    def x(self):
+        return self[0]
 
-        @x.setter
-        def x(self, value):
-            self[0] = value
+    @x.setter
+    def x(self, value):
+        self[0] = value
 
-        # y property
-        if n >= 2:
-            @property
-            def y(self):
-                return self[1]
+    # y property
+    @property
+    def y(self):
+        return self[1] if self.n > 1 else None
 
-            @y.getter
-            def y(self):
-                return self[1]
+    @y.getter
+    def y(self):
+        return self[1] if self.n > 1 else None
 
-            @y.setter
-            def y(self, value):
-                self[1] = value
+    @y.setter
+    def y(self, value):
+        if len(self) < 2:
+            raise NotImplementedError()
+        self[1] = value
 
-        # z property
-        if n >= 3:
-            @property
-            def z(self):
-                return self[2]
+    # z property
+    @property
+    def z(self):
+        return self[2] if self.n > 2 else None
 
-            @z.getter
-            def z(self):
-                return self[2]
+    @z.getter
+    def z(self):
+        return self[2] if self.n > 2 else None
 
-            @z.setter
-            def z(self, value):
-                self[2] = value
-
-    VectorBase.vector_classes[n] = VectorN
-    return VectorN
+    @z.setter
+    def z(self, value):
+        if len(self) < 3:
+            raise NotImplementedError()
+        self[2] = value
 
 
 # Commonly used vectors
-Vector2: Type = Vector(2)
-Vector3: Type = Vector(3)
+Vector2: TypeAlias = Vector
+Vector3: TypeAlias = Vector
