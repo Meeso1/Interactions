@@ -4,6 +4,7 @@ from numpy.typing import NDArray
 from scipy.interpolate import RectBivariateSpline   # type: ignore
 from typing import final, Final, Tuple, TypeAlias, Callable, Optional
 from .FieldValueRepr import FieldValueRepr, CordVal, ValueFunc, Values
+from .Derivatives import derivative_grid
 
 ValueFuncSpline: TypeAlias = Callable[[CordVal, CordVal, Optional[int], Optional[int]], Values]
 
@@ -35,10 +36,7 @@ class ExpSplineFieldRepr(FieldValueRepr):
         return self.f(x, y, 0, 0)
 
     def derivative(self, x: CordVal, y: CordVal, dx: int = 0, dy: int = 0) -> Values:
-        # if 0 <= dx <= 2 and 0 <= dy <= 2:
-        #    return self.f(x, y, dx, dy)
-        # else:
-        raise NotImplementedError()
+        return derivative_grid(self.f, x, y, dx, dy)
 
     def add(self, f: ValueFunc) -> None:
         self.data += f(self.x_cords, self.y_cords)
