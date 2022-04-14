@@ -1,7 +1,10 @@
 from __future__ import annotations
 import numpy as np
-from typing import List, Dict, Tuple, Optional, Callable, Union, Any
+from typing import List, Dict, Tuple, Optional, Callable, Union, Any, TypeAlias
 from scipy import spatial
+from math_primitives import FieldValueRepr
+from math_primitives.FieldValueRepr import CordVal, Values
+from numpy.typing import NDArray
 
 
 class Vector2:
@@ -48,55 +51,38 @@ class Ball:
         pass
 
 
+DerivativeFunc: TypeAlias = Callable[[CordVal, CordVal], Values]
+# Type of field derivative function.
+# For arguments x = [x1, x2, x3, ...] and y = [y1, y2, y3, ...]
+# returns an array of derivatives (d/dt) at points x*y (vector product)
+
+
 class Field:
-    Der_func = Callable[[np.ndarray, np.ndarray], np.ndarray]
-    # Type of field derivative function.
-    # For arguments x = [x1, x2, x3, ...] and y = [y1, y2, y3, ...]
-    # returns an array of derivatives (d/dt) at points x*y (vector product)
-
     name: str
-    values: np.ndarray
-    trace: List[Tuple[float, np.ndarray]]  # Field values log for plotting and analysis
+    values: FieldValueRepr
+    trace: List[Tuple[float, NDArray[np.float64]]]  # Field values log for plotting and analysis
 
-    res: Tuple[int, int]
-    size: Tuple[float, float]
-
-    val_func: Callable[[np.ndarray, np.ndarray], np.ndarray] = None
-    # Function that returns field value at given point (interpolated).
-    # For arguments x = [x1, x2, x3, ...] and y = [y1, y2, y3, ...]
-    # returns an array of values at points x*y (vector product).
-
-    derivatives: List[Tuple[Der_func, float]]
+    derivatives: List[Tuple[DerivativeFunc, float]]
     # List of tuples containing timestamps and derivative functions at that step.
 
-    current_derivative_list: List[Der_func]
+    current_derivative_list: List[DerivativeFunc]
     # List of current derivative functions that is appended by Interactions.
     # It is later (during update) collapsed into a single function that is appended to derivatives.
 
-    def make_val_func(self) -> Callable[[np.ndarray, np.ndarray], float]:
-        # Returns a value to be assigned to val_func.
-        # Called at the end of update.
-        pass
-
     def update(self, dt: float) -> None:
         # 1. Collapses current_derivative_list into one function and appends it to derivatives.
-        # 2. Updates field values based on derivatives
+        # 2. Updates field values based on derivatives (values += func)
         # 3. Appends values to trace
         # 4. Clears current_derivative_list
         pass
 
-    def values_cords(self) -> Tuple[np.ndarray, np.ndarray]:
-        # Returns coordinates that correspond to points at which field value is stored.
-        # The value returned should be compatible with a format used by val_func.
-        # Namely, it should be in form of 2 np.ndarrays with x and y coordinates.
-        pass
-
     def val(self, point: Vector2) -> float:
         # returns a field value at the point given.
+        # Forwards arguments to vals()
         pass
 
-    def vals(self, points_x: np.ndarray, points_y: np.ndarray) -> np.ndarray:
-        # val() for a grid of points. Forwards its arguments to val_func.
+    def vals(self, points_x: CordVal, points_y: CordVal) -> Values:
+        # val() for a grid of points. Forwards its arguments to values().
         pass
 
     # Analytical properties:
@@ -109,21 +95,20 @@ class Field:
     # angle     - slope of the field in given direction
 
 
+Target: TypeAlias = Tuple[Ball, str] | Field
+# Type that represents the target of the interaction - the thing that will be changed by it.
+# If it is a Field, Interaction produces the derivative of its values.
+# If it is a Ball, second item in a tuple specifies the name of the attribute to be changed,
+# or "velocity" (position shouldn't be changed directly, except in Collisions).
+Source: TypeAlias = Ball | Field
+# Specifies the source of the interaction. Used in formula.
+Ball_Derivative_Func: TypeAlias = Callable[[Target, Source], Any]
+Field_Derivative_Func: TypeAlias = Callable[[Target, Source], DerivativeFunc]
+Formula: TypeAlias = Ball_Derivative_Func | Field_Derivative_Func
+
+
 class Interaction:
-    Target = Union[Tuple[Ball, str], Field]
-    # Type that represents the target of the interaction - the thing that will be changed by it.
-    # If it is a Field, Interaction produces the derivative of its values.
-    # If it is a Ball, second item in a tuple specifies the name of the attribute to be changed,
-    # or "velocity" (position shouldn't be changed directly, except in Collisions).
-
-    Source = Union[Ball, Field]
-    # Specifies the source of the interaction. Used in formula.
-
     time: float = 0
-
-    Ball_Derivative_Func = Callable[[Target, Source], np.ndarray]
-    Field_Derivative_Func = Callable[[Target, Source], Field.Der_func]
-
     name: str
     attribute: str
     targets: Tuple[str, str]
@@ -131,7 +116,7 @@ class Interaction:
     # If targets[0] is "Ball", attribute specifies which attribute of the Ball will be changed.
     # Interaction formula will be called with an argument (ball, attribute) for every ball in simulation.
 
-    formula: Union[Ball_Derivative_Func, Field_Derivative_Func]
+    formula: Formula
     # A formula that generates a derivative.
 
     radius: float
@@ -155,7 +140,7 @@ class Interaction:
         pass
 
     @staticmethod
-    def update_val_field(target: Field, source: Source, f: Field_Derivative_Func, dt: float) -> None:
+    def update_val_field(target: Field, source: Source, f: Field_Derivative_Func) -> None:
         # Called in update().
         # Appends a function produced by an Interaction formula to a current_derivative_list.
         # f is a formula of the Interaction. It takes arguments: source, target

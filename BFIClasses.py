@@ -1,42 +1,29 @@
 from __future__ import annotations
-import numpy as np
-from typing import List, Dict, Tuple, Optional, Callable, Union, Any
+from typing import List, Tuple, Optional, Callable, cast
 from scipy import spatial
-from scipy.interpolate import interp2d, griddata, RectBivariateSpline
 from math import inf
-from math_primitives .Vector import *
-
-n: int = 20         # Field resolution (represented as n x n x n array)
-width: float = 100  # Field width
-
-
-def length(vector: np.ndarray) -> float:
-    return np.linalg.norm(vector)
-
-
-def normalized(vector: np.ndarray) -> np.ndarray:
-    norm = length(vector)
-    if norm == 0:
-        return vector * 0
-    else:
-        return vector * 1/norm
+from math_primitives.Vector import *
+from math_primitives.FieldValueRepr import CordVal, Values, FieldValueRepr
+from numpy.typing import NDArray
 
 
 class Ball:
 
-    position: np.ndarray
-    velocity: np.ndarray
-    attributes: Dict[str, float]
+    position: Vector2
+    velocity: Vector2
+    attributes: Dict[str, Any]
     time: float
 
-    trace: List[Tuple[float, np.ndarray, np.ndarray]]         # Position and velocity log for plotting
-    attr_derivatives: Dict[str, List[Tuple[float, float]]]    # Past derivatives used by Interactions
+    trace: List[Tuple[float, Vector2, Vector2]]                 # Position and velocity log for plotting
+    attr_derivatives: Dict[str, List[Tuple[float, Any]]]        # Past derivatives used by Interactions
 
-    def __init__(self, position: np.ndarray, velocity: np.ndarray,
+    def __init__(self, position: Vector2, velocity: Vector2,
                  attributes: Dict[str, Any] = None, copy_attr: bool = True) -> None:
-        self.position = position
-        self.velocity = velocity
+        self.position: Vector2 = position
+        self.velocity: Vector2 = velocity
 
+        # Setup attributes
+        self.attributes: Dict[str, Any]
         if attributes is not None:
             if copy_attr:
                 self.attributes = attributes
@@ -45,219 +32,248 @@ class Ball:
         else:
             self.attributes = dict()
 
-        self.trace = []
-        self.time = 0
+        self.trace: List[Tuple[float, Vector2, Vector2]] = []
+        self.time: float = 0
 
-        self.attr_derivatives = dict()
-        for attr in self.attr_derivatives.keys():
-            pass    # Initialize with zero values
+        self.attr_derivatives: Dict[str, List[Tuple[float, Any]]] = {}
+        for attr in self.attributes.keys():
+            self.attr_derivatives[attr] = []
 
+    def init_attr_derivatives(self, time: float):
+        # Initializes new entries in every attr_derivatives list
+        # New values are default - type(prev_val)()
+        self.time = time
+        for key, val in self.attr_derivatives:
+            a = self.attributes[key]
+            if isinstance(a, Vector):
+                zero_val = Vector(a.n)
+            else:
+                zero_val = type(a)()
+            val.append((time, zero_val))
 
     def update(self, dt: float) -> None:
-        self.position += self.velocity * dt
-        self.time += dt
+        # Called after Interactions update
+        # Updates attrs based on attr_derivatives, using some method
+        # Updates velocity and position
+        # Step number is determined based on length of trace
+
         self.trace.append((self.time, self.position, self.velocity))
-        for val in self.attr_derivatives.values():
-            val.append((0, self.time))
+        step = len(self.trace)  # In the future will be used to switch to multistep methods
 
-    @staticmethod
-    def make_tree(balls: List[Ball]) -> spatial.KDTree:
-        pos = np.array([b.position for b in balls])
-        return spatial.KDTree(pos)
-
-    @staticmethod
-    def distance(a: Ball, b: Ball) -> float:
-        return np.linalg.norm(a.position - b.position)
-
-    def direction(self, other: Ball) -> np.ndarray:
-        return (other.position - self.position)*(1/Ball.distance(self, other))
-
-    def update_attrs(self, dt: float) -> None:
+        self.position += euler_step([(t, v) for (t, pos, v) in self.trace[-1:]], dt)
         self.velocity += euler_step(self.attr_derivatives["velocity"], dt)
         for attr in self.attributes.keys():
             self.attributes[attr] += euler_step(self.attr_derivatives[attr], dt)
 
+    @staticmethod
+    def make_tree(balls: List[Ball]) -> spatial.KDTree:
+        # Makes KDTree containing Balls positions
+        pos = np.array([b.position.data for b in balls])
+        return spatial.KDTree(pos)
+
+    @staticmethod
+    def distance(a: Ball, b: Ball) -> float:
+        return Vector.distance(a.position, b.position)
+
+    def direction(self, other: Ball) -> Vector2:
+        return (other.position - self.position).normalize()
+
+
+DerivativeFunc: TypeAlias = Callable[[CordVal, CordVal], Values]
+# Type of field derivative function.
+# For arguments x = [x1, x2, x3, ...] and y = [y1, y2, y3, ...]
+# returns an array of derivatives (d/dt) at points x*y (vector product)
+
 
 class Field:
-    Der_func = Callable[[np.ndarray, np.ndarray], np.ndarray]
-
-    dstep: float = 0.01
-
     name: str
-    values: np.ndarray
-    trace: List[Tuple[float, np.ndarray]]       # Field values log for plotting and analysis
+    time: float
+    values: FieldValueRepr
 
-    res: Tuple[int, int]
-    size: Tuple[float, float]
+    trace: List[Tuple[float, NDArray[np.float64]]]
+    # Field values log for plotting and analysis
 
-    val_func: Callable[[np.ndarray, np.ndarray, Optional[bool]], Union[float, np.ndarray]] = None
+    derivatives: List[Tuple[float, DerivativeFunc]]
+    # List of tuples containing timestamps and derivative functions at that step.
 
-    derivatives: List[Tuple[List[Der_func], float]]           # Used by Interactions
+    current_derivative_list: List[DerivativeFunc]
+    # List of current derivative functions that is appended by Interactions.
+    # It is later (during update) collapsed into a single function that is appended to derivatives.
 
-    def __init__(self, name: str, values: np.ndarray, size: Tuple[float, float] = None) -> None:
-        self.name = name
-        self.values = values
-        self.trace = []
-        self.res = values.shape
-        self.size = size
-        self.time = 0
+    def __init__(self, name: str, values: FieldValueRepr) -> None:
+        self.name: str = name
+        self.values: FieldValueRepr = values
+        self.trace: List[Tuple[float, NDArray[np.float64]]] = []
+        self.time: float = 0
 
-        self.derivatives = []
-
-        if size is not None:
-            self.val_func = interp2d(np.linspace(-self.size[0]/2, self.size[0]/2, self.res[0]),
-                            np.linspace(-self.size[1]/2, self.size[1]/2, self.res[1]),
-                            self.values, copy=False, fill_value=0)
-
-    def make_val_func(self) -> Callable[[np.ndarray, np.ndarray, Optional[bool]], float]:
-        return interp2d(np.linspace(-self.size[0] / 2, self.size[0] / 2, self.res[0]),
-                        np.linspace(-self.size[1] / 2, self.size[1] / 2, self.res[1]),
-                        self.values, copy=False, kind='cubic')
+        self.derivatives: List[Tuple[float, DerivativeFunc]] = []
 
     def update(self, dt: float) -> None:
         self.time += dt
-        self.trace.append((self.time, self.values))
-        self.val_func = self.make_val_func()
-        self.derivatives.append(([], self.time))
 
-    def update_val(self, dt: float) -> None:
-        d_list = Interaction.field_der_funcs(self, 1)
-        d_vals = [(func(self.values_cords()[0], self.values_cords()[1]), 0) for func in d_list]
-        self.values += euler_step(d_vals, dt)
+        # 1. Collapses current_derivative_list into one function and appends it to derivatives.
+        f: DerivativeFunc = lambda x, y: sum([func(x, y) for func in self.current_derivative_list])
+        self.derivatives.append((self.time, f))
 
-    def values_cords(self):
-        return np.linspace(-self.size[0] / 2, self.size[0] / 2, self.res[0]), \
-               np.linspace(-self.size[1] / 2, self.size[1] / 2, self.res[1])
+        # 2. Updates field values based on derivatives
+        self.values += euler_step(self.derivatives, dt)
 
-    # analytical properties:
-    def val(self, point: np.ndarray) -> float:
-        if self.val_func is None:
-            self.val_func = self.make_val_func()
-        return self.val_func(point[0], point[1])
+        # 3. Appends values to trace
+        self.trace.append((self.time, self.values.get_data()))
 
-    def vals(self, points_x: np.ndarray, points_y: np.ndarray) -> np.ndarray:
-        return self.val_func(points_x, points_y, assume_sorted=True)
+        # 4. Clears current_derivative_list
+        self.current_derivative_list.clear()
 
-    def dx(self, point: np.ndarray) -> float:
-        h = self.size[0]*self.dstep
-        return ((self.val(point + [h, 0]) - self.val(point - [h, 0])) / (2 * h))[0]
+    def val(self, point: Vector2) -> float:
+        # returns a field value at the point given.
+        # Forwards arguments to vals()
+        v = self.vals(np.array(point.x, dtype=np.float64), np.array(point.y, dtype=np.float64))
+        if isinstance(v, float):
+            return v
+        elif isinstance(v, NDArray[np.float64]) and v.size == 1:
+            return v[0]     # This case is currently redundant
+        raise RuntimeError(f"vals() returned an unexpected array in response to (float, float) call: {str(v)}")
 
-    def dx_mat(self, points_x: np.ndarray, points_y: np.ndarray) -> np.ndarray:
-        h = self.size[0] * self.dstep
-        return (self.vals(points_x + h, points_y) - self.vals(points_x - h, points_y)) / (2 * h)
+    def vals(self, points_x: CordVal, points_y: CordVal) -> Values:
+        # val() for a grid of points. Forwards its arguments to values().
+        return self.values(points_x, points_y)
 
-    def dy(self, point: np.ndarray) -> float:
-        h = self.size[1]*self.dstep
-        return ((self.val(point + [0, h]) - self.val(point - [0, h])) / (2 * h))[0]
+    # Analytical properties:
+    # dx, dy    - using an external derivative() function
+    # TODO: dt  - interpolated from derivatives list
+    # dx2, dy2  - with external derivative2() function
+    # gradient  - with dx and dy
+    # dir       - directional derivative
+    # div, rot  - divergence and rotation (vector fields only!)
+    # angle     - slope of the field in given direction
 
-    def dy_mat(self, points_x: np.ndarray, points_y: np.ndarray) -> np.ndarray:
-        h = self.size[1] * self.dstep
-        return (self.vals(points_x, points_y + h) - self.vals(points_x, points_y + h)) / (2 * h)
+    def dx(self, x: CordVal, y: CordVal) -> Values:
+        return self.values.dx(x, y)
 
-    def dx2(self, point: np.ndarray) -> float:
-        h = self.size[0]*self.dstep
-        return (self.val(point + [h, 0]) - 2 * self.val(point) + self.val(point - [h, 0])) / (h ** 2)
+    def dy(self, x: CordVal, y: CordVal) -> Values:
+        return self.values.dy(x, y)
 
-    def dx2_mat(self, points_x: np.ndarray, points_y: np.ndarray) -> np.ndarray:
-        h = self.size[0] * self.dstep
-        return (self.vals(points_x + h, points_y) - 2 * self.vals(points_x, points_y)
-                + self.vals(points_x - h, points_y)) / (h ** 2)
+    def dx2(self, x: CordVal, y: CordVal) -> Values:
+        return self.values.dx2(x, y)
 
-    def dy2(self, point: np.ndarray) -> float:
-        h = self.size[1]*self.dstep
-        return (self.val(point + [0, h]) - 2 * self.val(point) + self.val(point - [0, h])) / (h ** 2)
+    def dy2(self, x: CordVal, y: CordVal) -> Values:
+        return self.values.dy2(x, y)
 
-    def dy2_mat(self, points_x: np.ndarray, points_y: np.ndarray) -> np.ndarray:
-        h = self.size[1] * self.dstep
-        return (self.vals(points_x, points_y + h) - 2 * self.vals(points_x, points_y)
-                + self.vals(points_x, points_y - h)) / (h ** 2)
+    def gradient(self, x: float, y: float) -> Vector2:
+        return Vector2([self.dx(x, y), self.dy(x, y)])
 
-    def gradient(self, point: np.ndarray) -> np.ndarray:
-        return np.array([self.dx(point), self.dy(point)])
+    def dir(self, x: CordVal, y: CordVal, v: Vector2) -> Values:
+        return self.dx(x, y)*v.x + self.dy(x, y)*v.y
+
+    def angle(self, x: CordVal, y: CordVal, v: Vector2) -> Values:
+        return np.arctan(self.dir(x, y, v))
+
+
+Target: TypeAlias = Tuple[Ball, str] | Field
+Source: TypeAlias = Ball | Field
+Ball_Derivative_Func: TypeAlias = Callable[[Target, Source], np.ndarray]
+Field_Derivative_Func: TypeAlias = Callable[[Target, Source], DerivativeFunc]
+Formula: TypeAlias = Ball_Derivative_Func | Field_Derivative_Func
 
 
 class Interaction:
-
-    time: float = 0
-
-    Target = Union[Tuple[Ball, str], Field]
-    Source = Union[Ball, Field]
-
-    Ball_Derivative_Func = Callable[[Target, Source], np.ndarray]
-    Field_Derivative_Func = Callable[[Target, Source], Field.Der_func]
-
+    time: float
     name: str
+    attribute: str | None
     targets: Tuple[str, str]
-    formula: Union[Ball_Derivative_Func, Field_Derivative_Func]
-    attribute: str
+    # Specifies what the Interaction exists between. "Ball" specifies any Ball, field name specifies field.
+    # If targets[0] is "Ball", attribute specifies which attribute of the Ball will be changed.
+    # Interaction formula will be called with an argument (ball, attribute) for every ball in simulation.
+
+    formula: Formula
+    # A formula that generates a derivative.
+
     radius: float
+    # Radius of the interaction between Balls. KDTree is used to select all pairs of Balls that are close enough.
+
+    ball_select_func: Callable[[List[Ball]], List[List[int]]]
+    # A function that selects Balls that are "close enough" to interact (alternative to KDTree query).
+    # If None, KDTree query is used. None by default.
 
     def __init__(self,
                  name: str,
                  between: Tuple[str, str],
-                 formula: Union[Ball_Derivative_Func, Field_Derivative_Func],  # f: a,b => da/dt
+                 formula: Formula,  # f: a,b => da/dt
                  radius: Optional[float] = inf,
-                 attribute: Optional[str] = None) -> None:
-        self.name = name
-        self.targets = between
-        self.radius = radius
-        self.attribute = attribute
-        self.formula = formula  # derivative of sth.
+                 attribute: Optional[str] = None,
+                 ball_select_func: Optional[Callable[[List[Ball]], List[List[int]]]] = None) -> None:
+        self.name: str = name
+        self.time: float = 0
+        self.targets: Tuple[str, str] = between
+        self.radius: float = radius
+        self.attribute: str | None = attribute
+        self.formula: Formula = formula  # derivative of sth.
 
-    def update(self, dt: float, targets: Tuple[List[Ball], Dict[str, Field]], ball_tree: spatial.KDTree = None):
+        self.ball_select_func: Callable[[List[Ball]], List[List[int]]] = \
+            ball_select_func if ball_select_func is not None else self._ball_select_from_tree
+
+        if self.targets[0] == "Ball" and self.attribute is None:
+            raise TypeError("If the Interaction targets a Ball, 'attribute' argument must be provided!")
+
+    def update(self, dt: float, targets: Tuple[List[Ball], Dict[str, Field]]):
+        # Updates a target value - values of a Field, or a value of a chosen attribute of a Ball.
+        # In (Ball, Ball) interaction a ball_select_func is used to determine which balls interact which which.
         (balls, fields) = targets
         if self.targets == ("Ball", "Ball"):
-            if ball_tree is not None:
-                res = ball_tree.query_ball_tree(ball_tree, self.radius)
-            else:
-                res = [[index for index in range(len(balls))
-                        if self.radius == inf or Ball.distance(ball, balls[index]) < self.radius]
-                       for ball in balls]
+            res = self.ball_select_func(balls)
             for i in range(len(res)):
                 for j in res[i]:
                     if j != i:
                         self.update_val_ball((balls[i], self.attribute),
                                              balls[j],
-                                             self.formula, dt)
+                                             self.formula)
 
         elif self.targets[0] == "Ball":
             for ball in balls:
                 self.update_val_ball((ball, self.attribute),
                                      fields[self.targets[1]],
-                                     self.formula, dt)
+                                     self.formula)
 
         elif self.targets[1] == "Ball":
             for ball in balls:
                 self.update_val_field(fields[self.targets[0]],
-                                      ball, self.formula, dt)
+                                      ball, self.formula)
 
         else:
             self.update_val_field(fields[self.targets[0]],
                                   fields[self.targets[1]],
-                                  self.formula, dt)
+                                  self.formula)
 
     @staticmethod
-    def update_val_ball(target: Tuple[Ball, str], source: Source, f: Ball_Derivative_Func, dt: float) -> None:
+    def update_val_ball(target: Tuple[Ball, str], source: Source, f: Ball_Derivative_Func) -> None:
+        # Called in update().
+        # Increments a derivative value of a corresponding attribute (target[1]) of a Ball (target[0]).
+        # f is a formula of the Interaction. It takes arguments: source, target
         ball, attr_name = target
         if attr_name == "velocity":
-            ball.attr_derivatives["velocity"][-1] += f(target, source)
+            ball.attr_derivatives["velocity"][-1][1] += f(target, source)
         else:
-            ball.attr_derivatives[attr_name][-1] += f(target, source)
+            ball.attr_derivatives[attr_name][-1][1] += f(target, source)
 
     @staticmethod
-    def update_val_field(target: Field, source: Source, f: Field_Derivative_Func, dt: float) -> None:
-        target.derivatives[-1][0].append(f(target, source))
+    def update_val_field(target: Field, source: Source, f: Field_Derivative_Func) -> None:
+        # Called in update().
+        # Appends a function produced by an Interaction formula to a current_derivative_list.
+        # f is a formula of the Interaction. It takes arguments: source, target
+        target.current_derivative_list.append(f(target, source))
 
-    @staticmethod
-    def field_der_funcs(field: Field, steps_back: int) -> List[Field.Der_func]:
-        output = []
-        for i in range(steps_back):
-            output.insert(0, lambda x, y: sum([func(x, y) for func in field.derivatives[-i-1][0]]))
-        return output
+    def _ball_select_from_tree(self, balls: List[Ball]) -> List[List[int]]:
+        tree = Ball.make_tree(balls)
+        return cast(tree.query_ball_tree(tree, self.radius), List[List[int]])
 
 
-def euler_step(d_vals: List[Tuple[np.ndarray, float]], dt: float) -> np.ndarray:
-    return d_vals[-1][0]*dt
+def euler_step(d_vals: List[Tuple[float, Any]], dt: float) -> Any:
+    return d_vals[-1][1]*dt
+
+
+def euler_step_field(d_vals: List[Tuple[float, DerivativeFunc]], dt: float) -> DerivativeFunc:
+    res: DerivativeFunc = lambda x, y: d_vals[-1][1](x, y)*dt
+    return res
 
 
 def method2_step(d_vals: List[Tuple[np.ndarray, float]], dt: float) -> np.ndarray:

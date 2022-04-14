@@ -41,7 +41,7 @@ class Vector:
             except BaseException:
                 raise Exception(f"Cannot create a Vector from {type(data)}")
 
-        self.data = _data
+        self.data = _data.copy()
 
         if self.data.size == 0:
             raise ValueError(f"""Cannot create a Vector from a 0-sized numpy array: {str(data)}""")
@@ -114,6 +114,9 @@ class Vector:
         if not is_num(val):
             raise TypeError(f"Cannot assign {type(val)} to Vector coordinate")
         self.data[i] = val
+
+    def __copy__(self):
+        return Vector(self)
 
     def length(self) -> float:
         return np.sqrt(self.dot(self))
