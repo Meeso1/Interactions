@@ -1,7 +1,5 @@
 from __future__ import annotations
-import numpy as np
-from typing import List, Dict, Tuple, Optional, Callable, Union, Any
-from math import inf
+from typing import Literal
 import pygame as pg
 from BFIClasses import *
 
@@ -17,34 +15,39 @@ class Simulation:
 
     field_res: Tuple[int, int]
     field_size: Tuple[float, float]
-    border_size: Union[Tuple[float, float], None]
-    border_effect: str
+    border_size: Tuple[float, float] | None
+    border_effect: Literal["bounce", "stop", "contain"]
 
     dt: float
     total_time: float
     time: float
     step_num: int
 
-    ball_tree: spatial.KDTree = None
+    def __init__(self,
+                 start_balls: List[Ball],
+                 fields: Dict[str, Field],
+                 interactions: List[Interaction],
+                 field_res: Tuple[int, int] = (n, n),
+                 field_size: Tuple[float, float] = (width, width),
+                 border_size: Tuple[float, float] | Literal["auto"] = "auto",
+                 border_effect: Literal["bounce", "stop", "contain"] = "bounce",
+                 steps_per_second: int = 100,
+                 total_time: float = 100):
 
-    def __init__(self, start_balls: List[Ball], fields: Dict[str, Field], interactions: List[Interaction],
-                 field_res: Tuple[int, int] = (n, n), field_size: Tuple[float, float] = (width, width),
-                 border_size: Union[Tuple[float, float], str] = "auto", border_effect: str = "bounce",
-                 steps_per_second: int = 100, total_time: float = 100):
-        self.field_res = field_res
-        self.field_size = field_size
+        self.field_res: Tuple[int, int] = field_res
+        self.field_size: Tuple[float, float] = field_size
+
+        self.border_size: Tuple[float, float]
         if border_size == "auto":
             self.border_size = field_size
         else:
             self.border_size = border_size
-        if border_effect not in ("bounce", "stop", "contain"):
-            raise Exception(f"Unrecognised border effect: {border_effect}", border_effect)
-        else:
-            self.border_effect = border_effect
 
-        self.balls = start_balls
-        self.fields = fields
-        self.interactions = interactions
+        self.border_effect: Literal["bounce", "stop", "contain"] = border_effect
+
+        self.balls: List[Ball] = start_balls
+        self.fields: Dict[str, Field] = fields
+        self.interactions: List[Interaction] = interactions
 
         # Setup attr_derivatives for balls
         for ball in start_balls:
@@ -54,21 +57,11 @@ class Simulation:
             for attr in ball.attributes.keys():
                 ball.attr_derivatives[attr] = []
 
-        # Setup field res and size
-        for field in fields.values():
-            if field.res is None:
-                field.res = field.values.shape
-            if field.size is None:
-                field.size = self.field_size
+        self.dt: float = 1/steps_per_second
+        self.total_time: float = total_time
 
-        self.dt = 1/steps_per_second
-        self.total_time = total_time
-
-        self.time = 0
-        self.step_num = 0
-
-        if len(self.balls) > 0:
-            self.ball_tree = Ball.make_tree(self.balls)
+        self.time: float = 0
+        self.step_num: int = 0
 
     def add_balls(self, new_balls: List[Ball]) -> None:
         if len(new_balls) <= 0:
@@ -80,19 +73,6 @@ class Simulation:
                 continue
             for attr in ball.attributes.keys():
                 ball.attr_derivatives[attr] = []
-        self.ball_tree = Ball.make_tree(self.balls)
-
-    def add_fields(self, fields: List[Field]) -> None:
-        for field in fields:
-            self.fields[field.name] = field
-            if field.res is None:
-                field.res = field.values.shape
-            if field.size is None:
-                field.size = self.field_size
-
-    def add_interactions(self, interactions: List[Interaction]) -> None:
-        for interaction in interactions:
-            self.interactions.append(interaction)
 
     def check_border(self, ball: Ball) -> None:
         if self.border_size is None:
@@ -130,22 +110,17 @@ class Simulation:
         if self.time >= self.total_time:
             return
 
-        Interaction.time = self.time
+        for ball in self.balls:
+            ball.init_attr_derivatives(self.time)
+
+        for interaction in self.interactions:
+            interaction.update(self.dt, (self.balls, self.fields))
+
         for ball in self.balls:
             ball.update(self.dt)
             self.check_border(ball)
-        if len(self.balls) > 0:
-            self.ball_tree = Ball.make_tree(self.balls)
         for field in self.fields.values():
             field.update(self.dt)
-        for interaction in self.interactions:
-            interaction.update(self.dt, (self.balls, self.fields), self.ball_tree)
-
-        # Update attrs and vals based on derivatives
-        for ball in self.balls:
-            ball.update_attrs(self.dt)
-        for field in self.fields.values():
-            field.update_val(self.dt)
 
         self.time += self.dt
         self.step_num += 1
@@ -157,9 +132,11 @@ class Simulation:
             self.step()
 
 
+Color: TypeAlias = Tuple[int, int, int]
+
+
 class SimulationDisplay:
 
-    Color = Tuple[int, int, int]
     background_color: Color = (255, 255, 255)
     ball_color: Color = (255, 0, 255)
     display_size: Tuple[int, int] = (1000, 600)
@@ -174,28 +151,36 @@ class SimulationDisplay:
     time: float
     frame_num: int
 
-    background_field: str
+    background_field: str | None
     background_field_res: Tuple[int, int]
+    background_field_range: Tuple[float, float]
 
-    def __init__(self, simulation: Simulation, fps: int = -1,
+    def __init__(self,
+                 simulation: Simulation,
+                 fps: int = -1,
                  ball_radius: float = 10,
-                 display_size: Tuple[int, int] = (1000, 600), scale: float = 1,
-                 background_field: str = None,
-                 background_field_res: Tuple[int, int] = (60, 60)):
-        if fps > 1 / simulation.dt:
-            fps = 1 / simulation.dt
-        self.FPS = fps
-        self.frame_time = 1 / self.FPS
-        self.simulation = simulation
+                 display_size: Tuple[int, int] = (1000, 600),
+                 scale: float = 1,
+                 background_field: str | None = None,
+                 background_field_res: Tuple[int, int] = (60, 60),
+                 background_field_range: Tuple[float, float] = (0, 100)):
 
-        self.time = 0
-        self.frame_num = 0
-        self.ball_radius = ball_radius
+        if fps > 1 / simulation.dt or fps == -1:
+            fps = np.floor(1 / simulation.dt)
 
-        self.display_size = display_size
-        self.scale = scale
-        self.background_field = background_field
-        self.background_field_res = background_field_res
+        self.FPS: int = fps
+        self.frame_time: float = 1 / self.FPS
+        self.simulation: Simulation = simulation
+
+        self.time: float = 0
+        self.frame_num: int = 0
+        self.ball_radius: float = ball_radius
+
+        self.display_size: Tuple[int, int] = display_size
+        self.scale: float = scale
+        self.background_field: str | None = background_field
+        self.background_field_res: Tuple[int, int] = background_field_res
+        self.background_field_range: Tuple[float, float] = background_field_range
 
     def display_sim(self) -> None:
         pg.init()
@@ -220,24 +205,32 @@ class SimulationDisplay:
             # draw background field
             if self.background_field is not None:
                 field = self.simulation.fields[self.background_field]
-                avg = field.values.sum()/field.values.size
-                field_disp_size = int(field.size[0] * self.scale), int(field.size[1] * self.scale)
-                values = field.vals(np.linspace(-field.size[0]/2, field.size[0]/2, self.background_field_res[1]),
-                                    np.linspace(-field.size[1]/2, field.size[1]/2, self.background_field_res[0]))
-                shades = 1 - 1 / (values / avg + 1)
-                p_color = (shades*255).astype(np.ubyte)
-                colors = np.dstack([(255*np.sin(shades*np.pi/2)).astype(np.ubyte),
-                                    (255*(np.sin(shades*np.pi/2)) + np.cos(shades*np.pi/2)/2).astype(np.ubyte),
-                                    (255*np.cos(shades*np.pi/2)).astype(np.ubyte)])
-                rect_dim = field_disp_size[0]/self.background_field_res[0], \
-                    field_disp_size[1]/self.background_field_res[1]
+                field_real_size = field.values.get_size()
+                min_v = self.background_field_range[0]     # vals.max()
+                max_v = self.background_field_range[1]     # vals.min()
+
+                # avg = vals.sum()/vals.size
+                avg_range = (max_v + min_v)/2
+                field_display_size = int(field_real_size[0] * self.scale), int(field_real_size[1] * self.scale)
+                values = field.vals(
+                    np.linspace(-field_real_size[0]/2, field_real_size[0]/2, self.background_field_res[1]),
+                    np.linspace(-field_real_size[1]/2, field_real_size[1]/2, self.background_field_res[0]))
+                shades = np.arctan((values - avg_range)/(max_v - min_v)*5)
+                # p_color = (shades*255).astype(np.ubyte)
+                colors = np.dstack([(255*(np.sin(shades*np.pi/2)+1)/2).astype(np.ubyte),
+                                    (255*(np.sin(shades*np.pi/2) +
+                                          np.cos(shades*np.pi/2) +
+                                          1.42)/(1.42*2)).astype(np.ubyte),
+                                    (255*(np.cos(shades*np.pi/2)+1)/2).astype(np.ubyte)])
+                rect_dim = field_display_size[0]/self.background_field_res[0], \
+                    field_display_size[1]/self.background_field_res[1]
                 center = self.pos_to_screen((0, 0))
                 for i in range(self.background_field_res[0]):
                     for j in range(self.background_field_res[1]):
                         pg.draw.rect(display, colors[i][j],
-                                     pg.Rect((rect_dim[0]*i + center[0] - field_disp_size[0]/2,
-                                             rect_dim[1]*j + center[1] - field_disp_size[1]/2),
-                                             np.ceil(rect_dim)))
+                                     pg.Rect((rect_dim[0]*i + center[0] - field_display_size[0]/2,
+                                             rect_dim[1]*j + center[1] - field_display_size[1]/2),
+                                             list(np.ceil(rect_dim))))
 
             # Center dot
             pg.draw.circle(display, (0, 0, 0), self.pos_to_screen((0, 0)), 3)
@@ -245,7 +238,7 @@ class SimulationDisplay:
             # Display balls
             for ball in self.simulation.balls:
                 pg.draw.circle(display, self.ball_color,
-                               self.pos_to_screen((ball.position[0], ball.position[1])),
+                               self.pos_to_screen((ball.position.x, ball.position.y)),
                                self.ball_radius)
             pg.display.update()
 

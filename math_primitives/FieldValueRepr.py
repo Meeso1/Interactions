@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 from abc import ABC, abstractmethod
-from typing import Union, final, Callable, Any, TypeAlias
+from typing import Union, final, Callable, Any, TypeAlias, Tuple
 from .Vector import Vector2
 
 CordVal: TypeAlias = Union[float, NDArray[np.float64]]
@@ -11,6 +11,10 @@ ValueFunc: TypeAlias = Callable[[CordVal, CordVal], Values]
 
 
 class FieldValueRepr(ABC):
+
+    @abstractmethod
+    def get_size(self) -> Tuple[float, float]:
+        pass
 
     @abstractmethod
     def get_value(self, x: CordVal, y: CordVal) -> Values:
@@ -33,8 +37,9 @@ class FieldValueRepr(ABC):
         return self.get_value(x, y)
 
     @final
-    def __iadd__(self, f: ValueFunc) -> None:
+    def __iadd__(self, f: ValueFunc) -> FieldValueRepr:
         self.add(f)
+        return self
 
     def dx(self, x: CordVal, y: CordVal) -> Values:
         return self.derivative(x, y, dx=1, dy=0)
