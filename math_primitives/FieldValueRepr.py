@@ -1,13 +1,8 @@
 from __future__ import annotations
-import numpy as np
-from numpy.typing import NDArray
 from abc import ABC, abstractmethod
-from typing import Union, final, Callable, Any, TypeAlias, Tuple
+from typing import final, Any, Tuple
 from .Vector import Vector2
-
-CordVal: TypeAlias = Union[float, NDArray[np.float64]]
-Values: TypeAlias = Union[float, NDArray[np.float64]]
-ValueFunc: TypeAlias = Callable[[CordVal, CordVal], Values]
+from type_declarations.Types import *
 
 
 class FieldValueRepr(ABC):
@@ -29,7 +24,21 @@ class FieldValueRepr(ABC):
         pass
 
     @abstractmethod
+    def copy(self) -> FieldValueRepr:
+        pass
+
+    @abstractmethod
     def derivative(self, x: CordVal, y: CordVal, dx: int = 0, dy: int = 0) -> Values:
+        pass
+
+    @classmethod
+    @final
+    def from_values(cls, size: Tuple[float, float], data: NDArray[np.float64]) -> FieldValueRepr:
+        return cls._from_values(size, data)
+
+    @staticmethod
+    @abstractmethod
+    def _from_values(size: Tuple[float, float], data: NDArray[np.float64]) -> FieldValueRepr:
         pass
 
     @final

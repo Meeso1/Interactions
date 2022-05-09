@@ -1,6 +1,5 @@
 from __future__ import annotations
 import numpy as np
-from abc import ABC
 from typing import Type, Any, Dict, TypeGuard, Final, TypeAlias
 from numpy.typing import NDArray
 

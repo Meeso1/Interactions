@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Literal
 import pygame as pg
 from BFIClasses import *
+from math_primitives.ConstantFieldRepr import ConstantFieldRepr
 
 n: int = 20         # Field resolution (represented as n x n x n array)
 width: float = 100  # Field width
@@ -16,7 +17,7 @@ class Simulation:
     field_res: Tuple[int, int]
     field_size: Tuple[float, float]
     border_size: Tuple[float, float] | None
-    border_effect: Literal["bounce", "stop", "contain"]
+    border_effect: Literal["repel", "stop", "ignore"]
 
     dt: float
     total_time: float
@@ -30,7 +31,7 @@ class Simulation:
                  field_res: Tuple[int, int] = (n, n),
                  field_size: Tuple[float, float] = (width, width),
                  border_size: Tuple[float, float] | Literal["auto"] = "auto",
-                 border_effect: Literal["bounce", "stop", "contain"] = "bounce",
+                 border_effect: Literal["repel", "stop", "ignore"] = "repel",
                  steps_per_second: int = 100,
                  total_time: float = 100):
 
@@ -43,19 +44,26 @@ class Simulation:
         else:
             self.border_size = border_size
 
-        self.border_effect: Literal["bounce", "stop", "contain"] = border_effect
+        self.border_effect: Literal["repel", "stop", "ignore"] = border_effect
 
         self.balls: List[Ball] = start_balls
         self.fields: Dict[str, Field] = fields
         self.interactions: List[Interaction] = interactions
 
-        # Setup attr_derivatives for balls
-        for ball in start_balls:
-            ball.attr_derivatives["velocity"] = []
-            if ball.attributes is None:
-                continue
-            for attr in ball.attributes.keys():
-                ball.attr_derivatives[attr] = []
+        if not self.border_effect == "ignore":
+            border_field = Field("border field",
+                                 ConstantFieldRepr.from_values(self.field_size, np.zeros((20, 20))))
+            self.fields["border field"] = border_field
+        if self.border_effect == "repel":
+            border_interaction = Interaction("border repulsion", ("Ball", "border field"),
+                                             lambda target, _: self._check_border_repel(target[0]),     # type: ignore
+                                             attribute="velocity")
+            self.interactions.append(border_interaction)
+        elif self.border_effect == "stop":
+            border_interaction = Interaction("border friction", ("Ball", "border field"),
+                                             lambda target, _: self._check_border_stop(target[0]),      # type: ignore
+                                             attribute="velocity")
+            self.interactions.append(border_interaction)
 
         self.dt: float = 1/steps_per_second
         self.total_time: float = total_time
@@ -68,57 +76,65 @@ class Simulation:
             return
         for ball in new_balls:
             self.balls.append(ball)
-            ball.attr_derivatives["velocity"] = []
-            if ball.attributes is None:
-                continue
-            for attr in ball.attributes.keys():
-                ball.attr_derivatives[attr] = []
 
-    def check_border(self, ball: Ball) -> None:
+    def _check_border_repel(self, ball: Ball) -> Vector2:
+        k = 5
+        damp = 2
+
+        res = Vector([0, 0])
         if self.border_size is None:
-            return
+            return res
 
-        if ball.position[0] > self.border_size[0]/2:
-            ball.position[0] = self.border_size[0] / 2
-            if self.border_effect == "bounce":
-                ball.velocity[0] = -ball.velocity[0]
-            elif self.border_effect == "stop":
-                ball.velocity[0] = 0
+        pos = ball.position.current
+        size = Vector(self.border_size)
+        if pos.x < -size.x/2:
+            res.x += min(k * (pos.x + size.x / 2) ** 2, abs(ball.velocity.current.x) / (self.dt * damp))
+        elif pos.x > size.x/2:
+            res.x -= min(k * (pos.x - size.x / 2) ** 2, abs(ball.velocity.current.x) / (self.dt * damp))
 
-        elif ball.position[0] < -self.border_size[0]/2:
-            ball.position[0] = -self.border_size[0] / 2
-            if self.border_effect == "bounce":
-                ball.velocity[0] = -ball.velocity[0]
-            elif self.border_effect == "stop":
-                ball.velocity[0] = 0
+        if pos.y < -size.y/2:
+            res.y += min(k * (pos.y + size.y / 2) ** 2, abs(ball.velocity.current.y) / (self.dt * damp))
+        elif pos.y > size.y/2:
+            res.y -= min(k * (pos.y - size.y / 2) ** 2, abs(ball.velocity.current.y) / (self.dt * damp))
 
-        if ball.position[1] > self.border_size[1]/2:
-            ball.position[1] = self.border_size[1] / 2
-            if self.border_effect == "bounce":
-                ball.velocity[1] = -ball.velocity[1]
-            elif self.border_effect == "stop":
-                ball.velocity[1] = 0
+        return res
 
-        elif ball.position[1] < -self.border_size[1]/2:
-            ball.position[1] = -self.border_size[1] / 2
-            if self.border_effect == "bounce":
-                ball.velocity[1] = -ball.velocity[1]
-            elif self.border_effect == "stop":
-                ball.velocity[1] = 0
+    def _check_border_stop(self, ball: Ball) -> Vector2:
+        k = 5
+        damp = 2
+
+        res = Vector([0, 0])
+        if self.border_size is None:
+            return res
+
+        pos = ball.position.current
+        vel = ball.velocity.current
+        size = Vector(self.border_size)
+        if pos.x < -size.x / 2:
+            if vel.x < 0:
+                res.x += min(k * vel.x ** 2, abs(vel.x)/(self.dt * damp))
+        elif pos.x > size.x / 2:
+            if vel.x > 0:
+                res.x -= min(k * vel.x ** 2, abs(vel.x) / (self.dt * damp))
+
+        if pos.y < -size.y / 2:
+            if vel.y < 0:
+                res.y += min(k * vel.y ** 2, abs(vel.y)/(self.dt * damp))
+        elif pos.y > size.y / 2:
+            if vel.y > 0:
+                res.y -= min(k * vel.y ** 2, abs(vel.y) / (self.dt * damp))
+
+        return res
 
     def step(self) -> None:
         if self.time >= self.total_time:
             return
-
-        for ball in self.balls:
-            ball.init_attr_derivatives(self.time)
 
         for interaction in self.interactions:
             interaction.update(self.dt, (self.balls, self.fields))
 
         for ball in self.balls:
             ball.update(self.dt)
-            self.check_border(ball)
         for field in self.fields.values():
             field.update(self.dt)
 
@@ -238,7 +254,7 @@ class SimulationDisplay:
             # Display balls
             for ball in self.simulation.balls:
                 pg.draw.circle(display, self.ball_color,
-                               self.pos_to_screen((ball.position.x, ball.position.y)),
+                               self.pos_to_screen((ball.position.current.x, ball.position.current.y)),
                                self.ball_radius)
             pg.display.update()
 

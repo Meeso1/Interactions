@@ -26,12 +26,12 @@ class ExpSplineFieldRepr(FieldValueRepr):
     def get_size(self) -> Tuple[float, float]:
         return self.size
 
-    @classmethod
-    def from_values(cls, size: Tuple[float, float], data: NDArray[np.float64]) -> ExpSplineFieldRepr:
+    @staticmethod
+    def _from_values(size: Tuple[float, float], data: NDArray[np.float64]) -> ExpSplineFieldRepr:
         if len(data.shape) != 2:
             raise ValueError("data must be a 2d array")
 
-        new = cls(size, (data.shape[0], data.shape[1]))
+        new = ExpSplineFieldRepr(size, (data.shape[0], data.shape[1]))
         new.data = data
         new.f = new._make_func()
         return new
@@ -48,6 +48,9 @@ class ExpSplineFieldRepr(FieldValueRepr):
 
     def get_data(self) -> NDArray[np.float64] | float:
         return self(self.x_cords, self.y_cords)
+
+    def copy(self) -> FieldValueRepr:
+        return ExpSplineFieldRepr.from_values(self.get_size(), self.data.copy())
 
     def _make_func(self) -> ValueFuncSpline:
         f = RectBivariateSpline(self.x_cords, self.y_cords, np.log(self.data))

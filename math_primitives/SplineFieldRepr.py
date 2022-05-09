@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import RectBivariateSpline   # type: ignore
-from typing import final, Final, Callable, Tuple, TypeAlias
+from typing import final, Final, Callable, Tuple, TypeAlias, cast
 from .FieldValueRepr import FieldValueRepr, CordVal, ValueFunc, Values
 from .Derivatives import derivative_grid
 from .Vector import is_array
@@ -27,12 +27,12 @@ class SplineFieldRepr(FieldValueRepr):
     def get_size(self) -> Tuple[float, float]:
         return self.size
 
-    @classmethod
-    def from_values(cls, size: Tuple[float, float], data: NDArray[np.float64]) -> SplineFieldRepr:
+    @staticmethod
+    def _from_values(size: Tuple[float, float], data: NDArray[np.float64]) -> SplineFieldRepr:
         if len(data.shape) != 2:
             raise ValueError("data must be a 2d array")
 
-        new = cls(size, (data.shape[0], data.shape[1]))
+        new = SplineFieldRepr(size, (data.shape[0], data.shape[1]))
         new.data = data
         new.f = new._make_func()
         return new
@@ -54,6 +54,9 @@ class SplineFieldRepr(FieldValueRepr):
 
     def get_data(self) -> NDArray[np.float64] | float:
         return self(self.x_cords, self.y_cords)
+
+    def copy(self) -> FieldValueRepr:
+        return SplineFieldRepr.from_values(self.get_size(), self.data.copy())
 
     def _make_func(self) -> ValueFuncSpline:
         return RectBivariateSpline(self.x_cords, self.y_cords, self.data)
