@@ -1,9 +1,32 @@
 from dataclasses import dataclass
-from typing import Generic
+from typing import Generic, cast
 from type_declarations.Types import *
 
 # from scipy.optimize import minimize
 # from scipy import integrate
+
+
+@dataclass
+class SplineSegment(Generic[N]):
+    a: N
+    b: N
+    c: N
+    d: N
+    e: N
+    t0: float
+    t1: float
+
+    def __call__(self, t: float) -> N:
+        return self.a * (t - self.t0) ** 4 + self.b * (t - self.t0) ** 3 + self.c * (t - self.t0) ** 2 \
+               + self.d * (t - self.t0) + self.e
+
+    def dt(self, t: float) -> N:
+        return 4 * self.a * (t - self.t0) ** 3 + 3 * self.b * (t - self.t0) ** 2 \
+               + 2 * self.c * (t - self.t0) + self.d
+
+    def d2t(self, t: float) -> N:
+        # TODO: Fix Vector * operator to detect return type based on arguments
+        return 12 * self.a * (t - self.t0) ** 2 + 6 * self.b * (t - self.t0) + 2 * self.c   # type: ignore
 
 
 class QuarticSplineGenerator(Generic[N]):
@@ -12,27 +35,6 @@ class QuarticSplineGenerator(Generic[N]):
     Spline is extendable in O(1) time (for new values at the end of the list).
     Free parameter is chosen to minimize a given condition.
     """
-
-    @dataclass
-    class SplineSegment(Generic[N]):
-        a: N
-        b: N
-        c: N
-        d: N
-        e: N
-        t0: float
-        t1: float
-
-        def __call__(self, t: float):
-            return self.a * (t - self.t0) ** 4 + self.b * (t - self.t0) ** 3 + self.c * (t - self.t0) ** 2 \
-                   + self.d * (t - self.t0) + self.e
-
-        def dt(self, t: float):
-            return 4 * self.a * (t - self.t0) ** 3 + 3 * self.b * (t - self.t0) ** 2 \
-                   + 2 * self.c * (t - self.t0) + self.d
-
-        def d2t(self, t: float):
-            return 12 * self.a * (t - self.t0) ** 2 + 6 * self.b * (t - self.t0) + 2 * self.c
 
     def __init__(self, data_list: List[TimedVal[N]], initial_derivative: N, initial_d2: N):
         # data has to contain at least 1 value
@@ -43,7 +45,7 @@ class QuarticSplineGenerator(Generic[N]):
         self.current_func_data_length: int = 1
         self.last_entry: TimedVal[N] = self.data[0]
 
-        self.coeff: List[QuarticSplineGenerator.SplineSegment[N]] = []
+        self.coeff: List[SplineSegment[N]] = []
 
         self._update_func()
 
@@ -93,7 +95,7 @@ class QuarticSplineGenerator(Generic[N]):
 
         def b(alfa: N) -> N:
             dt = p1.time - p0.time
-            return - dt*alfa + p1.val*(1/dt**3) - 0.5*(1/dt)*d2 - (1/dt**2)*d1 - (1/dt**3)*p0.val
+            return - dt*alfa + p1.val*(1/dt**3) - 0.5*(1/dt)*d2 - (1/dt**2)*d1 - (1/dt**3)*p0.val   # type: ignore
 
         c = 0.5*d2
         d = d1
@@ -114,10 +116,11 @@ class QuarticSplineGenerator(Generic[N]):
 
         # First derivative matches at end
         # Works well if first derivative changes more rapidly (+/-) or is close to 0
-        alfa_val = -(3/x)*bb - (2/x**2)*c - (1/x**3)*d + (1/x**4)*(p1.val - p0.val)
+        # TODO: Remove cast() after fixing Vector *
+        alfa_val: N = -(3/x)*bb - (2/x**2)*c - (1/x**3)*d + (1/x**4)*(p1.val - p0.val)  # type: ignore
 
         # First derivative matches in the middle
         # Works well for data with slowly changing first derivative
         # alfa_val = (3/x)*bb + (4/x**2)*c + (4/x**3)*d - (4/x**4)*(p1.val - p0.val)
 
-        return QuarticSplineGenerator.SplineSegment(a(alfa_val), b(alfa_val), c, d, e, p0.time, p1.time)
+        return SplineSegment(a(alfa_val), b(alfa_val), c, d, e, p0.time, p1.time)

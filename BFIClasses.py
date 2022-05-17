@@ -10,6 +10,7 @@ from math_primitives.QuarticSplineGenerator import QuarticSplineGenerator
 from math_primitives.Vector import *
 from math_primitives.FieldValueRepr import CordVal, Values, FieldValueRepr
 from data_types.PrimaryData import PrimaryData, TimedVal, FieldStepFunc, PrimaryDataNumeric
+from type_declarations.Types import *
 from numpy.typing import NDArray
 
 
@@ -58,27 +59,7 @@ class Ball:
         return (other.position.current - self.position.current).normalize()
 
 
-DerivativeFunc: TypeAlias = Callable[[CordVal, CordVal], Values]
-# Type of field derivative function.
-# For arguments x = [x1, x2, x3, ...] and y = [y1, y2, y3, ...]
-# returns an array of derivatives (d/dt) at points x*y (vector product)
-
-
 class Field(PrimaryData):
-
-    name: str
-    time: float
-    values: FieldValueRepr
-
-    trace: List[TimedVal[FieldValueRepr]]
-    # Field values log for plotting and analysis
-
-    derivatives: List[TimedVal[DerivativeFunc]]
-    # List of tuples containing timestamps and derivative functions at that step.
-
-    current_derivative_list: List[DerivativeFunc]
-    # List of current derivative functions that is appended by Interactions.
-    # It is later (during update) collapsed into a single function that is appended to derivatives.
 
     def __init__(self, name: str,
                  values: FieldValueRepr,
@@ -97,12 +78,17 @@ class Field(PrimaryData):
         self.next_step_time: float | None = None
 
         self.values: FieldValueRepr = values
+
+        # List of current derivative functions that is appended by Interactions.
+        # It is later (during update) collapsed into a single function that is appended to derivatives.
         self.current_derivative_list: List[DerivativeFunc] = []
 
+        # Field values log for plotting and analysis
         self.trace: List[TimedVal[FieldValueRepr]] = [TimedVal(
             time=self.start_time,
             val=values.copy()
         )]
+        # List of data arrays of fields in trace (used for spline generation because FVRs can't be added)
         self._data_trace: List[TimedVal[NDArray[np.float64]]] = [TimedVal(
             time=self.start_time,
             val=values.get_data()
@@ -113,10 +99,11 @@ class Field(PrimaryData):
         )]
 
         self.step_func: FieldStepFunc = step_func
+        self._gen = QuarticSplineGenerator(self._data_trace,
+                                           np.zeros(self.values.get_data().shape),
+                                           np.zeros(self.values.get_data().shape))
         self._default_create_func: Callable[[List[TimedVal[NDArray[np.float64]]]], Callable[[float], FieldValueRepr]] \
-            = QuarticSplineGenerator(self._data_trace,
-                                     np.zeros(self.values.get_data().shape),
-                                     np.zeros(self.values.get_data().shape))
+            = lambda vals: lambda t, f=self._gen(vals): type(self.values).from_values(f(t))     # type: ignore
         self.create_func: Callable[[List[TimedVal[NDArray[np.float64]]]], Callable[[float], FieldValueRepr]]
         if create_func is None:
             self.create_func = self._default_create_func
@@ -185,13 +172,6 @@ class Field(PrimaryData):
         return values_data.dt
 
     # Analytical properties:
-    # dx, dy    - using an external derivative() function
-    # dt  - interpolated from derivatives list
-    # dx2, dy2  - with external derivative2() function
-    # gradient  - with dx and dy
-    # dir       - directional derivative
-    # div, rot  - divergence and rotation (vector fields only!)
-    # angle     - slope of the field in given direction
 
     def dx(self, x: CordVal, y: CordVal) -> Values:
         return self.values.dx(x, y)
@@ -316,7 +296,7 @@ class Interaction:
         # f is a formula of the Interaction. It takes arguments: source, target
         ball, attr_name = target
         if attr_name == "velocity":
-            ball.velocity.add_derivative((self.time, f(target, source)))
+            ball.velocity.add_derivative((self.time, cast(Vector, f(target, source))))
         else:
             ball.attributes[attr_name].add_derivative((self.time, f(target, source)))
 

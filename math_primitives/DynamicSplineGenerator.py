@@ -3,20 +3,21 @@ from typing import Generic
 from type_declarations.Types import *
 
 
+@dataclass
+class DSplineSegment(Generic[N]):
+    a: N
+    b: N
+    c: N
+    d: N
+    t0: float
+    t1: float
+
+
 class DynamicSplineGenerator(Generic[N]):
     """
     Class that generates a spline interpolation function from TimedVal list.
     Spline is extendable in O(1) time (for new values at the end of the list).
     """
-
-    @dataclass
-    class SplineSegment(Generic[N]):
-        a: N
-        b: N
-        c: N
-        d: N
-        t0: float
-        t1: float
 
     def __init__(self, data_list: List[TimedVal[N]], initial_derivative: N, initial_d2: N):
         # data has to contain at least 1 value
@@ -27,7 +28,7 @@ class DynamicSplineGenerator(Generic[N]):
         self.current_func_data_length: int = 1
         self.last_entry: TimedVal[N] = self.data[0]
 
-        self.coeff: List[DynamicSplineGenerator.SplineSegment[N]] = []
+        self.coeff: List[DSplineSegment[N]] = []
 
         self._update_func()
 
@@ -69,7 +70,7 @@ class DynamicSplineGenerator(Generic[N]):
         self.last_entry = self.data[-1]
 
     @staticmethod
-    def _new_coeffs(p0: TimedVal[N], p1: TimedVal[N], d1: N, d2: N) -> SplineSegment:
+    def _new_coeffs(p0: TimedVal[N], p1: TimedVal[N], d1: N, d2: N) -> DSplineSegment:
         xp = p0.time
         xn = p1.time
         yp = p0.val
@@ -85,4 +86,4 @@ class DynamicSplineGenerator(Generic[N]):
                + 6 * d1 * xn ** 2 * xp ** 2 - 4 * d1 * xn * xp ** 3 + 2 * xn ** 3 * yp - 6 * xn ** 2 * xp * yp
                + 6 * xn * xp ** 2 * yp - 2 * xp ** 3 * yn)
 
-        return DynamicSplineGenerator.SplineSegment(a, b, c, d, xp, xn)
+        return DSplineSegment(a, b, c, d, xp, xn)

@@ -35,11 +35,11 @@ class ConstantFieldRepr(FieldValueRepr):
 
     def add(self, f: ValueFunc) -> None:
         vals = f(self.x_cords, self.y_cords)
-        if isinstance(vals, float) and vals == 0:
-            return
-        elif (vals == 0).all():
-            return
-        raise RuntimeError("Cannot add() a non-zero value to ConstantFieldRepr")
+        if isinstance(vals, float):
+            if vals != 0:
+                raise RuntimeError("Cannot add() a non-zero value to ConstantFieldRepr")
+        elif not (vals == 0).all():
+            raise RuntimeError("Cannot add() a non-zero value to ConstantFieldRepr")
 
     def get_data(self) -> Any:
         return self.data.copy()
