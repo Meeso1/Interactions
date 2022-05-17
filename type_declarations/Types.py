@@ -4,6 +4,7 @@ from numpy.typing import NDArray
 from math_primitives.Vector import Vector
 from math_primitives.TimedVal import TimedVal
 
+# TODO: Change N to Arithmetic (but analyze usage first)
 N = TypeVar("N", float, Vector, NDArray[np.float64])
 
 CordVal: TypeAlias = float | NDArray[np.float64]

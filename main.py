@@ -5,6 +5,46 @@ from math_primitives.SplineFieldRepr import SplineFieldRepr
 from math_primitives.Vector import Vector
 
 
+def test0():
+    sim = Simulation(
+        start_balls=[Ball(
+            position=PrimaryDataNumeric(Vector2,
+                                        initial=Vector([15, -100]),
+                                        initial_derivative=Vector([0, 150]),
+                                        zero=lambda: Vector(2)),
+            velocity=PrimaryDataNumeric(Vector2,
+                                        initial=Vector([0, 150]),
+                                        zero=lambda: Vector(2))
+            ),
+            Ball(
+                position=PrimaryDataNumeric(Vector2,
+                                            initial=Vector([-15, 100]),
+                                            initial_derivative=Vector([0, -180]),
+                                            zero=lambda: Vector(2)),
+                velocity=PrimaryDataNumeric(Vector2,
+                                            initial=Vector([0, -180]),
+                                            zero=lambda: Vector(2))
+            ),
+            Ball(
+                position=PrimaryDataNumeric(Vector2,
+                                            initial=Vector([-100, 75]),
+                                            initial_derivative=Vector([162, 0]),
+                                            zero=lambda: Vector(2)),
+                velocity=PrimaryDataNumeric(Vector2,
+                                            initial=Vector([162, 0]),
+                                            zero=lambda: Vector(2))
+            )],
+        fields={},
+        interactions=[],
+        total_time=5, steps_per_second=1000, field_size=(1000, 600))
+
+    sim_display = SimulationDisplay(sim, 50, 8, scale=1,
+                                    background_field=None,
+                                    background_field_res=(50, 50),
+                                    background_field_range=(-0.05, 0.68))
+    sim_display.display_sim()
+
+
 def test1():
     repellent_values = np.ones((20, 20), dtype=float)
     x_lim = repellent_values.shape[0]
@@ -57,7 +97,7 @@ def test1():
                      attribute="velocity"),
          Interaction("Diffusion", ("repellent", "repellent"),
                      lambda _, rep: lambda x, y: 250 * (rep.dx2(x, y) + rep.dy2(x, y)))],
-        total_time=5, steps_per_second=100, field_size=(1000, 600))
+        total_time=5, steps_per_second=1000, field_size=(1000, 600))
 
     sim_display = SimulationDisplay(sim, 50, 8, scale=1,
                                     background_field="repellent",
@@ -191,4 +231,4 @@ def make_field_vals(size: Tuple[float, float], res: Tuple[int, int],
     return values
 
 
-test1()
+test3()

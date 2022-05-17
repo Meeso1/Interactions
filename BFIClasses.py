@@ -6,6 +6,7 @@ from math import inf
 
 from data_types.TimeVariantData import CompoundData, CompoundDataDerivative
 from math_primitives.FieldStepFunctions import euler_field
+from math_primitives.QuarticSplineGenerator import QuarticSplineGenerator
 from math_primitives.Vector import *
 from math_primitives.FieldValueRepr import CordVal, Values, FieldValueRepr
 from data_types.PrimaryData import PrimaryData, TimedVal, FieldStepFunc, PrimaryDataNumeric
@@ -84,7 +85,7 @@ class Field(PrimaryData):
                  start_time: float = 0,
                  initial_derivative: DerivativeFunc | None = None,
                  step_func: FieldStepFunc = euler_field,
-                 create_func: Callable[[List[TimedVal[FieldValueRepr]]],
+                 create_func: Callable[[List[TimedVal[NDArray[np.float64]]]],
                                        Callable[[float], FieldValueRepr]] | None = None):
         super(Field, self).__init__()
         self.name: str = name
@@ -102,13 +103,21 @@ class Field(PrimaryData):
             time=self.start_time,
             val=values.copy()
         )]
+        self._data_trace: List[TimedVal[NDArray[np.float64]]] = [TimedVal(
+            time=self.start_time,
+            val=values.get_data()
+        )]
         self.derivatives: List[TimedVal[DerivativeFunc]] = [TimedVal(
             time=self.start_time,
             val=lambda x, y: 0 if initial_derivative is None else initial_derivative    # type: ignore
         )]
 
         self.step_func: FieldStepFunc = step_func
-        self.create_func: Callable[[List[TimedVal[FieldValueRepr]]], Callable[[float], FieldValueRepr]]
+        self._default_create_func: Callable[[List[TimedVal[NDArray[np.float64]]]], Callable[[float], FieldValueRepr]] \
+            = QuarticSplineGenerator(self._data_trace,
+                                     np.zeros(self.values.get_data().shape),
+                                     np.zeros(self.values.get_data().shape))
+        self.create_func: Callable[[List[TimedVal[NDArray[np.float64]]]], Callable[[float], FieldValueRepr]]
         if create_func is None:
             self.create_func = self._default_create_func
         else:
@@ -116,12 +125,8 @@ class Field(PrimaryData):
         self.f: Callable[[float], FieldValueRepr] = lambda t: \
             self.trace[0].val if t == self.trace[0].time else self._raise_time_arg_error(t)     # type: ignore
 
-    def _default_create_func(self, values: List[TimedVal[FieldValueRepr]]) -> Callable[[float], FieldValueRepr]:
-        fun = CubicSpline([v.time for v in values], [v.val.get_data() for v in values])
-        return lambda t, f=fun: type(self.values).from_values(self.values.get_size(), f(t))     # type: ignore
-
     def _make_func(self) -> Callable[[float], FieldValueRepr]:
-        return self.create_func(self.trace)
+        return self.create_func(self._data_trace)
 
     def _raise_time_arg_error(self, time: float) -> Any:
         raise ValueError(f"time must be between start and current: {self.start_time} <= (t: {time}) <= {self.time}")
@@ -138,6 +143,7 @@ class Field(PrimaryData):
 
         # 3. Appends values to trace
         self.trace.append(TimedVal(self.values.copy(), self.time))
+        self._data_trace.append(TimedVal(self.values.get_data(), self.time))
         self.f = self._make_func()
 
         # 4. Clears current_derivative_list

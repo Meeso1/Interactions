@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Tuple, Generic, Any, Literal, Type
 
+from math_primitives.QuarticSplineGenerator import QuarticSplineGenerator
 from type_declarations.Types import *
 from math_primitives.NumericStepFunctions import euler
 from math_primitives.TimedVal import TimedVal
@@ -48,6 +49,8 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
         )]
 
         self.step_func: NumericStepFunc = step_func
+        self._default_make_func: Callable[[List[TimedVal[N]]], Callable[[float], N]] \
+            = QuarticSplineGenerator(self.values, self.derivatives[0].val, self.zero())
         self.create_func: Callable[[List[TimedVal[N]]], Callable[[float], N]]
         if create_func is None:
             self.create_func = self._default_make_func
@@ -56,10 +59,6 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
         self.f: Callable[[float], N] = lambda t: \
             self.values[0].val if t == start_time else self._raise_time_arg_error(t)
         self.data_changed: bool = False     # Only used if update == "lazy"
-
-    def _default_make_func(self, values: List[TimedVal[N]]) -> Callable[[float], N]:
-        fun = CubicSpline([v.time for v in values], [v.val for v in values])
-        return lambda t, f=fun: f(t) if not isinstance(self.zero(), Vector) else Vector(f(t))  # type: ignore
 
     def _make_func(self) -> Callable[[float], N]:
         return self.create_func(self.values)

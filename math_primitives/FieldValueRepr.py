@@ -20,7 +20,7 @@ class FieldValueRepr(ABC):
         pass
 
     @abstractmethod
-    def get_data(self) -> Any:
+    def get_data(self) -> NDArray[np.float64]:
         pass
 
     @abstractmethod
