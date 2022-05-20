@@ -1,6 +1,6 @@
 from __future__ import annotations
 import numpy as np
-from typing import Type, Any, Dict, TypeGuard, Final, TypeAlias
+from typing import Type, Any, Dict, TypeGuard, Final, TypeAlias, overload
 from numpy.typing import NDArray
 
 
@@ -14,6 +14,9 @@ def is_array(a: Any) -> TypeGuard[NDArray[np.float64]]:
 
 def is_vector(v: Any) -> TypeGuard[Vector]:
     return isinstance(v, Vector)
+
+
+Num: TypeAlias = int | float | NDArray[np.float64]
 
 
 class Vector:
@@ -72,10 +75,26 @@ class Vector:
     def __rsub__(self, other: Any) -> Vector:
         return self.__sub__(other)
 
-    def __mul__(self, other: Any) -> Vector | float:
+    @overload
+    def __mul__(self, other: Vector) -> float:
+        ...
+
+    @overload
+    def __mul__(self, other: Num) -> Vector:
+        ...
+
+    def __mul__(self, other: Num | Vector) -> Vector | float:
         if is_num(other):
             return Vector(self.data * other)
         return self.dot(other)
+
+    @overload
+    def __rmul__(self, other: Vector) -> float:
+        ...
+
+    @overload
+    def __rmul__(self, other: Num) -> Vector:
+        ...
 
     def __rmul__(self, other: Any) -> Vector | float:
         return self.__mul__(other)

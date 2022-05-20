@@ -7,33 +7,11 @@ from math_primitives.Vector import Vector
 
 def test0():
     sim = Simulation(
-        start_balls=[Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([15, -100]),
-                                        initial_derivative=Vector([0, 150]),
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([0, 150]),
-                                        zero=lambda: Vector(2))
-            ),
-            Ball(
-                position=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([-15, 100]),
-                                            initial_derivative=Vector([0, -180]),
-                                            zero=lambda: Vector(2)),
-                velocity=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([0, -180]),
-                                            zero=lambda: Vector(2))
-            ),
-            Ball(
-                position=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([-100, 75]),
-                                            initial_derivative=Vector([162, 0]),
-                                            zero=lambda: Vector(2)),
-                velocity=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([162, 0]),
-                                            zero=lambda: Vector(2))
-            )],
+        start_balls=[
+            make_ball(Vector([15, -100]), Vector([0, 150])),
+            make_ball(Vector([-15, 100]), Vector([0, -180])),
+            make_ball(Vector([-100, 75]), Vector([162, 0]))
+        ],
         fields={},
         interactions=[],
         total_time=5, steps_per_second=1000, field_size=(1000, 600))
@@ -63,33 +41,11 @@ def test1():
     field_repr = SplineFieldRepr.from_values((1000, 600), repellent_values)
 
     sim = Simulation(
-        start_balls=[Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([15, -100]),
-                                        initial_derivative=Vector([0, 150]),
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([0, 150]),
-                                        zero=lambda: Vector(2))
-         ),
-         Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([-15, 100]),
-                                        initial_derivative=Vector([0, -180]),
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([0, -180]),
-                                        zero=lambda: Vector(2))
-         ),
-         Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([-100, 75]),
-                                        initial_derivative=Vector([162, 0]),
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([162, 0]),
-                                        zero=lambda: Vector(2))
-         )],
+        start_balls=[
+            make_ball(Vector([15, -100]), Vector([0, 150])),
+            make_ball(Vector([-15, 100]), Vector([0, -180])),
+            make_ball(Vector([-100, 75]), Vector([162, 0]))
+        ],
         fields={"repellent": Field("repellent", field_repr)},
         interactions=[Interaction("Repulsion", ("Ball", "repellent"),
                       lambda target, repellent: 1000 * target[0].position.current.normalize() * repellent.value(
@@ -125,34 +81,12 @@ def test2():
            height_values.max(initial=-inf)))
 
     sim = Simulation(
-        start_balls=[Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([15, -100]),
-                                        initial_derivative=Vector([0, 150]),
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([0, 150]),
-                                        zero=lambda: Vector(2))
-        ),
-            Ball(
-                position=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([-15, 100]),
-                                            initial_derivative=Vector([0, -180]),
-                                            zero=lambda: Vector(2)),
-                velocity=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([0, -180]),
-                                            zero=lambda: Vector(2))
-            ),
-            Ball(
-                position=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([-100, 75]),
-                                            initial_derivative=Vector([162, 0]),
-                                            zero=lambda: Vector(2)),
-                velocity=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([162, 0]),
-                                            zero=lambda: Vector(2))
-            )],
-        fields={"height": Field("height", ExpSplineFieldRepr.from_values((1000, 600), height_values))},
+        start_balls=[
+                make_ball(Vector([15, -100]), Vector([0, 150])),
+                make_ball(Vector([-15, 100]), Vector([0, -180])),
+                make_ball(Vector([-100, 75]), Vector([162, 0])),
+            ],
+        fields={"height": Field("height", ExpSplineFieldRepr.from_values((1000, 600), height_values, const=True))},
         interactions=[Interaction("Gravity", ("Ball", "height"),
                                   lambda target, h: -20 * h.gradient(target[0].position.current.x,
                                                                      target[0].position.current.y),
@@ -172,34 +106,13 @@ def test3():
     print((temp_field.min(initial=inf), temp_field.sum() / temp_field.size, temp_field.max(initial=-inf)))
 
     sim = Simulation(
-        start_balls=[Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([15, -100]),
-                                        initial_derivative=Vector([0, 150]),
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=Vector([0, 150]),
-                                        zero=lambda: Vector(2))
-        ),
-            Ball(
-                position=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([-15, 100]),
-                                            initial_derivative=Vector([0, -180]),
-                                            zero=lambda: Vector(2)),
-                velocity=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([0, -180]),
-                                            zero=lambda: Vector(2))
-            ),
-            Ball(
-                position=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([-100, 75]),
-                                            initial_derivative=Vector([162, 0]),
-                                            zero=lambda: Vector(2)),
-                velocity=PrimaryDataNumeric(Vector2,
-                                            initial=Vector([162, 0]),
-                                            zero=lambda: Vector(2))
-            )],
-        fields={"temperature": Field("temperature", SplineFieldRepr.from_values((1000, 600), temp_field))},
+        start_balls=[
+            make_ball(Vector([15, -100]), Vector([0, 150])),
+            make_ball(Vector([-15, 100]), Vector([0, -180])),
+            make_ball(Vector([-100, 75]), Vector([162, 0])),
+        ],
+        fields={"temperature": make_field("temperature", size=(1000, 600), res=(50, 50),
+                                          func=lambda x, y: 10000 / (x ** 2 + y ** 2 + 1))},
         interactions=[Interaction("Too hot!", ("Ball", "temperature"),
                       lambda target, temp: -10000 * temp.gradient(target[0].position.current.x,
                                                                   target[0].position.current.y)
@@ -229,6 +142,27 @@ def make_field_vals(size: Tuple[float, float], res: Tuple[int, int],
         for j in range(len(cords[1])):
             values[j, i] = func(cords[0][i], cords[1][j])
     return values
+
+
+def make_ball(start_pos: Vector2, start_v: Vector2, attrs: Dict[str, PrimaryDataNumeric] | None = None) -> Ball:
+    return Ball(
+            position=PrimaryDataNumeric(Vector2,
+                                        initial=start_pos,
+                                        initial_derivative=start_v,
+                                        zero=lambda: Vector(2)),
+            velocity=PrimaryDataNumeric(Vector2,
+                                        initial=start_v,
+                                        zero=lambda: Vector(2)),
+            attributes=attrs
+            )
+
+
+def make_field(name: str, func: Callable[[float, float], float],
+               size: Tuple[float, float], res: Tuple[int, int] = (20, 20), positive: bool = False):
+    if positive:
+        return Field(name, ExpSplineFieldRepr.from_values(size, make_field_vals(size, res, func)))
+    else:
+        return Field(name, SplineFieldRepr.from_values(size, make_field_vals(size, res, func)))
 
 
 test3()

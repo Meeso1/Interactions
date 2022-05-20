@@ -1,11 +1,11 @@
 import numpy as np
 from typing import TypeVar, TypeAlias, Callable, List, Optional
+from type_declarations.Arithmetic import Arithmetic
 from numpy.typing import NDArray
 from math_primitives.Vector import Vector
 from math_primitives.TimedVal import TimedVal
 
-# TODO: Change N to Arithmetic (but analyze usage first)
-N = TypeVar("N", float, Vector, NDArray[np.float64])
+N = TypeVar("N", bound=Arithmetic)
 
 CordVal: TypeAlias = float | NDArray[np.float64]
 Values: TypeAlias = float | NDArray[np.float64]

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal
 import pygame as pg
 from BFIClasses import *
-from math_primitives.ConstantFieldRepr import ConstantFieldRepr
+from math_primitives.SplineFieldRepr import SplineFieldRepr
 
 n: int = 20         # Field resolution (represented as n x n x n array)
 width: float = 100  # Field width
@@ -52,7 +52,7 @@ class Simulation:
 
         if not self.border_effect == "ignore":
             border_field = Field("border field",
-                                 ConstantFieldRepr.from_values(self.field_size, np.zeros((20, 20))))
+                                 SplineFieldRepr.from_values(self.field_size, np.zeros((20, 20)), const=True))
             self.fields["border field"] = border_field
         if self.border_effect == "repel":
             border_interaction = Interaction("border repulsion", ("Ball", "border field"),

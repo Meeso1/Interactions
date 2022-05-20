@@ -36,7 +36,7 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
         self.start_time: float = start_time
         self.time: float = self.start_time      # Current time, based on last add_derivative() call
         self.zero: Callable[[], N] = zero if zero is not None else \
-            (lambda: val_type() if val_type not in (Vector, np.ndarray) else self._raise_no_arg_error("zero"))  # type: ignore
+            (lambda: val_type() if val_type in (int, float, complex) else self._raise_no_arg_error("zero"))  # type: ignore
         self.update: Literal["update", "lazy", "explicit"] = update
 
         self.derivatives: List[TimedVal[N]] = [TimedVal(

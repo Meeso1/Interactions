@@ -1,9 +1,6 @@
 from dataclasses import dataclass
-from typing import Generic, cast
+from typing import Generic, Literal
 from type_declarations.Types import *
-
-# from scipy.optimize import minimize
-# from scipy import integrate
 
 
 @dataclass
@@ -25,8 +22,7 @@ class SplineSegment(Generic[N]):
                + 2 * self.c * (t - self.t0) + self.d
 
     def d2t(self, t: float) -> N:
-        # TODO: Fix Vector * operator to detect return type based on arguments
-        return 12 * self.a * (t - self.t0) ** 2 + 6 * self.b * (t - self.t0) + 2 * self.c   # type: ignore
+        return 12 * self.a * (t - self.t0) ** 2 + 6 * self.b * (t - self.t0) + 2 * self.c
 
 
 class QuarticSplineGenerator(Generic[N]):
@@ -36,7 +32,9 @@ class QuarticSplineGenerator(Generic[N]):
     Free parameter is chosen to minimize a given condition.
     """
 
-    def __init__(self, data_list: List[TimedVal[N]], initial_derivative: N, initial_d2: N):
+    def __init__(self, data_list: List[TimedVal[N]],
+                 initial_derivative: N, initial_d2: N,
+                 mode: Literal["least bendy", "match end", "match middle"] = "match middle"):
         # data has to contain at least 1 value
         self.data: List[TimedVal[N]] = data_list
         self.initial_derivative: N = initial_derivative
@@ -47,6 +45,7 @@ class QuarticSplineGenerator(Generic[N]):
 
         self.coeff: List[SplineSegment[N]] = []
 
+        self.mode: Literal["least bendy", "match end", "match middle"] = mode
         self._update_func()
 
     def __call__(self, values: List[TimedVal[N]]) -> Callable[[float], N]:
@@ -87,15 +86,14 @@ class QuarticSplineGenerator(Generic[N]):
         self.current_func_data_length = len(self.data)
         self.last_entry = self.data[-1]
 
-    @staticmethod
-    def _new_coeffs(p0: TimedVal[N], p1: TimedVal[N], d1: N, d2: N) -> SplineSegment:
+    def _new_coeffs(self, p0: TimedVal[N], p1: TimedVal[N], d1: N, d2: N) -> SplineSegment:
 
         def a(alfa: N) -> N:
             return alfa
 
         def b(alfa: N) -> N:
             dt = p1.time - p0.time
-            return - dt*alfa + p1.val*(1/dt**3) - 0.5*(1/dt)*d2 - (1/dt**2)*d1 - (1/dt**3)*p0.val   # type: ignore
+            return - dt*alfa + p1.val*(1/dt**3) - 0.5*(1/dt)*d2 - (1/dt**2)*d1 - (1/dt**3)*p0.val
 
         c = 0.5*d2
         d = d1
@@ -105,10 +103,12 @@ class QuarticSplineGenerator(Generic[N]):
         bb = p1.val * (1 / x ** 3) - 0.5 * (1 / x) * d2 - (1 / x ** 2) * d1 - (1 / x ** 3) * p0.val
 
         # TODO: Choose additional condition based on data
+        alfa_val: N
 
         # Least bendy
         # Usually looks ok but can be better
-        # alfa_val = -(1/x)*bb - (1/(6*x**2))*c
+        if self.mode == "least bendy":
+            alfa_val = -(1/x)*bb - (1/(6*x**2))*c
 
         # Closest first derivative
         # Doesn't work :/
@@ -116,11 +116,15 @@ class QuarticSplineGenerator(Generic[N]):
 
         # First derivative matches at end
         # Works well if first derivative changes more rapidly (+/-) or is close to 0
-        # TODO: Remove cast() after fixing Vector *
-        alfa_val: N = -(3/x)*bb - (2/x**2)*c - (1/x**3)*d + (1/x**4)*(p1.val - p0.val)  # type: ignore
+        elif self.mode == "match end":
+            alfa_val = -(3/x)*bb - (2/x**2)*c - (1/x**3)*d + (1/x**4)*(p1.val - p0.val)
 
         # First derivative matches in the middle
         # Works well for data with slowly changing first derivative
-        # alfa_val = (3/x)*bb + (4/x**2)*c + (4/x**3)*d - (4/x**4)*(p1.val - p0.val)
+        elif self.mode == "match middle":
+            alfa_val = (3/x)*bb + (4/x**2)*c + (4/x**3)*d - (4/x**4)*(p1.val - p0.val)
+
+        else:
+            raise RuntimeError(f"Unrecognized mode value: {self.mode}")
 
         return SplineSegment(a(alfa_val), b(alfa_val), c, d, e, p0.time, p1.time)

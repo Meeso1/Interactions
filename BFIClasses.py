@@ -126,7 +126,7 @@ class Field(PrimaryData):
         self.derivatives.append(TimedVal(f, self.time))
 
         # 2. Updates field values based on derivatives
-        self.values += euler_field(self.derivatives, dt)
+        self.values.add(euler_field(self.derivatives, dt))
 
         # 3. Appends values to trace
         self.trace.append(TimedVal(self.values.copy(), self.time))
