@@ -8,6 +8,11 @@ from type_declarations.Types import *
 
 class FieldValueRepr(ABC):
 
+    @property
+    @abstractmethod
+    def const(self) -> bool:
+        pass
+
     @abstractmethod
     def get_size(self) -> Tuple[float, float]:
         pass

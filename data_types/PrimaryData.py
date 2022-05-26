@@ -4,11 +4,10 @@ from typing import Tuple, Generic, Any, Literal, Type
 
 from math_primitives.QuarticSplineGenerator import QuarticSplineGenerator
 from type_declarations.Types import *
-from math_primitives.NumericStepFunctions import euler
+from math_primitives.NumericStepFunctions import Euler
 from math_primitives.TimedVal import TimedVal
 from data_types.TimeVariantData import TimeVariantData, CompoundData, CompoundDataDerivative
 
-import numpy as np
 from scipy.interpolate import RectBivariateSpline, CubicSpline   # type: ignore
 
 
@@ -24,7 +23,7 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
 
     def __init__(self,
                  val_type: Type[N],
-                 step_func: NumericStepFunc = euler,
+                 step_func: NumericStepFunc = Euler(),
                  initial: N = None,             # At t = start_time
                  initial_derivative: N = None,  # At t = start_time
                  zero: Callable[[], N] | None = None,
@@ -35,6 +34,7 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
 
         self.start_time: float = start_time
         self.time: float = self.start_time      # Current time, based on last add_derivative() call
+                                                # Updated during collapse_last_val() call
         self.zero: Callable[[], N] = zero if zero is not None else \
             (lambda: val_type() if val_type in (int, float, complex) else self._raise_no_arg_error("zero"))  # type: ignore
         self.update: Literal["update", "lazy", "explicit"] = update
@@ -70,12 +70,14 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
         raise ValueError(f"Following arguments are required in this context :{arg_name}")
 
     def val(self, time: float) -> N:
-        if not self.start_time <= time <= self.time:
+        if not self.update == "lazy" and not self.start_time <= time <= self.time:
             self._raise_time_arg_error(time)
         if self.update == "lazy":
             if self.values[-1].time <= time:
                 return self.f(time)
             else:
+                # this doesn't work :/
+                # but I don't use it so it's fine
                 i = 0
                 for i in range(len(self.values)):
                     if self.values[-i-1].time >= time:
@@ -84,14 +86,12 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
                     t = self.derivatives[-i].time
                     df = self.step_func(self.derivatives, t)
                     self.values.append(TimedVal(self.values[-1].val + df, t))
-
+                self.time = self.derivatives[-1].time
                 self.f = self._make_func()
         return self.f(time)
 
     def add_derivative(self, p: Tuple[float, N]) -> None:
         (time, value) = p
-        if self.time < time:
-            self.time = time
 
         if self.derivatives[-1].time == time:
             self.derivatives[-1].val += value
@@ -100,6 +100,7 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
 
         if self.update == "update":
             df = self.step_func(self.derivatives, None)
+            self.time = self.derivatives[-1].time
             if self.values[-1].time == self.time:
                 self.values[-1].val = self.values[-2].val + df
             else:
@@ -109,6 +110,7 @@ class PrimaryDataNumeric(PrimaryData, Generic[N]):
     def collapse_last_val(self) -> None:
         if len(self.derivatives) < 2:
             raise AttributeError("At least 2 derivative values needed to make a step")
+        self.time = self.derivatives[-1].time
         df = self.step_func(self.derivatives, None)
         self.values.append(TimedVal(self.values[-1].val + df, self.time))
         self.f = self._make_func()

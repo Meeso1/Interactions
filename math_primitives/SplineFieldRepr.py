@@ -40,6 +40,10 @@ class SplineFieldRepr(FieldValueRepr):
     def __mul__(self, other: float) -> SplineFieldRepr:
         return cast(SplineFieldRepr, SplineFieldRepr.from_values(self.size, other * self.get_data()))
 
+    @property
+    def const(self) -> bool:
+        return self._ignore_add
+
     def get_size(self) -> Tuple[float, float]:
         return self.size
 

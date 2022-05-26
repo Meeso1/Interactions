@@ -1,15 +1,15 @@
 from __future__ import annotations
-from typing import List, Tuple, Optional, Callable, cast, Union
+from typing import Tuple, cast, Union
 from scipy import spatial                   # type: ignore
 from scipy.interpolate import CubicSpline   # type: ignore
 from math import inf
 
 from data_types.TimeVariantData import CompoundData, CompoundDataDerivative
-from math_primitives.FieldStepFunctions import euler_field
+from math_primitives.FieldStepFunctions import EulerField
 from math_primitives.QuarticSplineGenerator import QuarticSplineGenerator
 from math_primitives.Vector import *
-from math_primitives.FieldValueRepr import CordVal, Values, FieldValueRepr
-from data_types.PrimaryData import PrimaryData, TimedVal, FieldStepFunc, PrimaryDataNumeric
+from math_primitives.FieldValueRepr import FieldValueRepr
+from data_types.PrimaryData import PrimaryData, PrimaryDataNumeric
 from type_declarations.Types import *
 from numpy.typing import NDArray
 
@@ -31,15 +31,17 @@ class Ball:
         self.start_time: float = start_time
         self.time: float = self.start_time
 
-    def update(self, dt: float) -> None:
+    def update(self, new_time: float) -> None:
         # Called after Interactions update
         # Adds current velocity as current position derivative
         # Updates values of all attributes (collapse_last_val())
 
-        self.time += dt
+        if new_time <= self.time:
+            raise ValueError(f"update() called with new_time that is not in the future ({new_time} <= {self.time})")
+        self.time = new_time
 
-        self.velocity.collapse_last_val()
         self.position.add_derivative((self.time, self.velocity.current))
+        self.velocity.collapse_last_val()
         self.position.collapse_last_val()
 
         for attr in self.attributes.keys():
@@ -65,7 +67,7 @@ class Field(PrimaryData):
                  values: FieldValueRepr,
                  start_time: float = 0,
                  initial_derivative: DerivativeFunc | None = None,
-                 step_func: FieldStepFunc = euler_field,
+                 step_func: FieldStepFunc = EulerField(),
                  create_func: Callable[[List[TimedVal[NDArray[np.float64]]]],
                                        Callable[[float], FieldValueRepr]] | None = None):
         super(Field, self).__init__()
@@ -118,20 +120,25 @@ class Field(PrimaryData):
     def _raise_time_arg_error(self, time: float) -> Any:
         raise ValueError(f"time must be between start and current: {self.start_time} <= (t: {time}) <= {self.time}")
 
-    def update(self, dt: float) -> None:
-        self.time += dt
+    def update(self, new_time: float) -> None:
+        if new_time <= self.time:
+            raise ValueError(f"update() called with new_time that is not in the future ({new_time} <= {self.time})")
 
-        # 1. Collapses current_derivative_list into one function and appends it to derivatives.
-        f: DerivativeFunc = lambda x, y: sum([func(x, y) for func in self.current_derivative_list[:]])
-        self.derivatives.append(TimedVal(f, self.time))
+        self.time = new_time
 
-        # 2. Updates field values based on derivatives
-        self.values.add(euler_field(self.derivatives, dt))
+        if not self.values.const:
 
-        # 3. Appends values to trace
-        self.trace.append(TimedVal(self.values.copy(), self.time))
-        self._data_trace.append(TimedVal(self.values.get_data(), self.time))
-        self.f = self._make_func()
+            # 1. Collapses current_derivative_list into one function and appends it to derivatives.
+            f: DerivativeFunc = lambda x, y: sum([func(x, y) for func in self.current_derivative_list[:]])
+            self.derivatives.append(TimedVal(f, self.time))
+
+            # 2. Updates field values based on derivatives
+            self.values.add(self.step_func(self.derivatives, self.time))
+
+            # 3. Appends values to trace
+            self.trace.append(TimedVal(self.values.copy(), self.time))
+            self._data_trace.append(TimedVal(self.values.get_data(), self.time))
+            self.f = self._make_func()
 
         # 4. Clears current_derivative_list
         self.current_derivative_list.clear()
@@ -256,18 +263,32 @@ class Interaction:
         if ball_select_func is not None:
             self.ball_select_func = ball_select_func
         else:
-            f: Callable[[List[Ball]], List[List[int]]] = lambda a: self._ball_select_from_tree(a)
-            self.ball_select_func = f
+            self.ball_select_func = self._ball_select_all_pairs
 
         if self.targets[0] == "Ball" and self.attribute is None:
             raise TypeError("If the Interaction targets a Ball, 'attribute' argument must be provided!")
 
-    def update(self, dt: float, targets: Tuple[List[Ball], Dict[str, Field]]) -> None:
+    def update(self, new_time: float, targets: Tuple[List[Ball], Dict[str, Field]]) -> None:
         # Updates a target value - values of a Field, or a value of a chosen attribute of a Ball.
         # In (Ball, Ball) interaction a ball_select_func is used to determine which balls interact which which.
-        self.time += dt
+        if new_time <= self.time:
+            raise ValueError(f"update() called with new_time that is not in the future ({new_time} <= {self.time})")
+        self.time = new_time
+
         (balls, fields) = targets
-        if self.targets == ("Ball", "Ball"):
+        # "Self" source is used when there is no source of the interaction
+        if self.targets[1] == "Self":
+            if self.targets[0] == "Ball":
+                for ball in balls:
+                    self.update_val_ball((ball, cast(str, self.attribute)),
+                                         ball,
+                                         cast(Ball_Derivative_Func, self.formula))
+            else:
+                self.update_val_field(fields[self.targets[0]],
+                                      fields[self.targets[0]],
+                                      cast(Field_Derivative_Func, self.formula))
+
+        elif self.targets == ("Ball", "Ball"):
             res = self.ball_select_func(balls)
             for i in range(len(res)):
                 for j in res[i]:
@@ -309,3 +330,7 @@ class Interaction:
     def _ball_select_from_tree(self, balls: List[Ball]) -> List[List[int]]:
         tree = Ball.make_tree(balls)
         return cast(List[List[int]], tree.query_ball_tree(tree, self.radius))
+
+    @staticmethod
+    def _ball_select_all_pairs(balls: List[Ball]) -> List[List[int]]:
+        return [list(range(len(balls)))] * len(balls)

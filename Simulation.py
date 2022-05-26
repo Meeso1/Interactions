@@ -10,20 +10,6 @@ width: float = 100  # Field width
 
 class Simulation:
 
-    balls: List[Ball]
-    fields: Dict[str, Field]
-    interactions: List[Interaction]
-
-    field_res: Tuple[int, int]
-    field_size: Tuple[float, float]
-    border_size: Tuple[float, float] | None
-    border_effect: Literal["repel", "stop", "ignore"]
-
-    dt: float
-    total_time: float
-    time: float
-    step_num: int
-
     def __init__(self,
                  start_balls: List[Ball],
                  fields: Dict[str, Field],
@@ -33,6 +19,7 @@ class Simulation:
                  border_size: Tuple[float, float] | Literal["auto"] = "auto",
                  border_effect: Literal["repel", "stop", "ignore"] = "repel",
                  steps_per_second: int = 100,
+                 start_time: float = 0,
                  total_time: float = 100):
 
         self.field_res: Tuple[int, int] = field_res
@@ -50,6 +37,7 @@ class Simulation:
         self.fields: Dict[str, Field] = fields
         self.interactions: List[Interaction] = interactions
 
+        # Interactions with border
         if not self.border_effect == "ignore":
             border_field = Field("border field",
                                  SplineFieldRepr.from_values(self.field_size, np.zeros((20, 20)), const=True))
@@ -67,8 +55,10 @@ class Simulation:
 
         self.dt: float = 1/steps_per_second
         self.total_time: float = total_time
+        self._timesteps: NDArray[np.float64] = \
+            np.linspace(start_time, self.total_time, int(steps_per_second*self.total_time))
 
-        self.time: float = 0
+        self.time: float = start_time
         self.step_num: int = 0
 
     def add_balls(self, new_balls: List[Ball]) -> None:
@@ -79,7 +69,7 @@ class Simulation:
 
     def _check_border_repel(self, ball: Ball) -> Vector2:
         k = 5
-        damp = 2
+        damp = 1.01
 
         res = Vector([0, 0])
         if self.border_size is None:
@@ -127,24 +117,25 @@ class Simulation:
         return res
 
     def step(self) -> None:
-        if self.time >= self.total_time:
+        if self.step_num >= len(self._timesteps)-1:
             return
 
+        self.step_num += 1
+
         for interaction in self.interactions:
-            interaction.update(self.dt, (self.balls, self.fields))
+            interaction.update(self._timesteps[self.step_num], (self.balls, self.fields))
 
         for ball in self.balls:
-            ball.update(self.dt)
+            ball.update(self._timesteps[self.step_num])
         for field in self.fields.values():
-            field.update(self.dt)
+            field.update(self._timesteps[self.step_num])
 
-        self.time += self.dt
-        self.step_num += 1
+        self.time = self._timesteps[self.step_num]
 
     def simulate(self, max_time: float = inf) -> None:
         if max_time == inf:
             max_time = self.total_time
-        while self.time < max_time:
+        while self.time < max_time and self.step_num < len(self._timesteps)-1:
             self.step()
 
 

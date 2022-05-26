@@ -1,6 +1,8 @@
 from __future__ import annotations
 from Simulation import *
+from utility import *
 from math_primitives.ExpSplineFieldRepr import ExpSplineFieldRepr
+from math_primitives.NumericStepFunctions import Method3212, Euler, AdamsBashford5, AdamsMoulton5
 from math_primitives.SplineFieldRepr import SplineFieldRepr
 from math_primitives.Vector import Vector
 
@@ -14,7 +16,7 @@ def test0():
         ],
         fields={},
         interactions=[],
-        total_time=5, steps_per_second=1000, field_size=(1000, 600))
+        total_time=15, steps_per_second=20, field_size=(1000, 600))
 
     sim_display = SimulationDisplay(sim, 50, 8, scale=1,
                                     background_field=None,
@@ -53,7 +55,7 @@ def test1():
                      attribute="velocity"),
          Interaction("Diffusion", ("repellent", "repellent"),
                      lambda _, rep: lambda x, y: 250 * (rep.dx2(x, y) + rep.dy2(x, y)))],
-        total_time=5, steps_per_second=1000, field_size=(1000, 600))
+        total_time=15, steps_per_second=100, field_size=(1000, 600))
 
     sim_display = SimulationDisplay(sim, 50, 8, scale=1,
                                     background_field="repellent",
@@ -121,7 +123,7 @@ def test3():
                                                              target[0].velocity.current.normalize())
                       * target[0].velocity.current.normalize(),
                      attribute="velocity")],
-        total_time=15, steps_per_second=50, field_size=(1000, 600))
+        total_time=15, steps_per_second=150, field_size=(1000, 600))
 
     test_point = Vector([10, 10])
     print(sim.fields["temperature"].value(test_point))
@@ -134,35 +136,29 @@ def test3():
     disp.display_sim()
 
 
-def make_field_vals(size: Tuple[float, float], res: Tuple[int, int],
-                    func: Callable[[float, float], float]):
-    cords = np.linspace(-size[0] / 2, size[0] / 2, res[0]), np.linspace(-size[1] / 2, size[1] / 2, res[1])
-    values = np.zeros((cords[1].size, cords[0].size))
-    for i in range(len(cords[0])):
-        for j in range(len(cords[1])):
-            values[j, i] = func(cords[0][i], cords[1][j])
-    return values
+def test4(step_func: Callable[[], NumericStepFunc] = lambda: Euler(), sps: int = 100):
+    g = 1e7
+    a = 100
+    v = np.sqrt((1+2*np.sqrt(2))*(g/a))/2
+
+    sim = Simulation(
+        start_balls=[
+            make_ball(a * Vector([0, -1]), v * Vector([1, 0]),  start_dv=v**2/a * Vector([0, 1]), step_func=step_func),
+            make_ball(a * Vector([0, 1]),  v * Vector([-1, 0]), start_dv=v**2/a * Vector([0, -1]), step_func=step_func),
+            make_ball(a * Vector([1, 0]),  v * Vector([0, 1]),  start_dv=v**2/a * Vector([-1, 0]), step_func=step_func),
+            make_ball(a * Vector([-1, 0]), v * Vector([0, -1]), start_dv=v**2/a * Vector([1, 0]), step_func=step_func)
+        ],
+        fields={},
+        interactions=[Interaction("gravity", ("Ball", "Ball"),
+                                  formula=lambda target, source:
+                                  g/(Ball.distance(target[0], source)**2) * target[0].direction(source),
+                                  attribute="velocity"
+                                  )],
+        total_time=5, steps_per_second=sps, field_size=(1000, 600))
+
+    sim_display = SimulationDisplay(sim, fps=50, ball_radius=8)
+    sim_display.display_sim()
 
 
-def make_ball(start_pos: Vector2, start_v: Vector2, attrs: Dict[str, PrimaryDataNumeric] | None = None) -> Ball:
-    return Ball(
-            position=PrimaryDataNumeric(Vector2,
-                                        initial=start_pos,
-                                        initial_derivative=start_v,
-                                        zero=lambda: Vector(2)),
-            velocity=PrimaryDataNumeric(Vector2,
-                                        initial=start_v,
-                                        zero=lambda: Vector(2)),
-            attributes=attrs
-            )
-
-
-def make_field(name: str, func: Callable[[float, float], float],
-               size: Tuple[float, float], res: Tuple[int, int] = (20, 20), positive: bool = False):
-    if positive:
-        return Field(name, ExpSplineFieldRepr.from_values(size, make_field_vals(size, res, func)))
-    else:
-        return Field(name, SplineFieldRepr.from_values(size, make_field_vals(size, res, func)))
-
-
-test3()
+# test4(step_func=lambda: Method3212(), sps=10)
+test0()

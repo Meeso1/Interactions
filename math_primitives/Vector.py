@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 
 def is_num(a: Any) -> TypeGuard[int | float]:
-    return isinstance(a, (int, float))
+    return isinstance(a, (int, float, np.float64))
 
 
 def is_array(a: Any) -> TypeGuard[NDArray[np.float64]]:
@@ -16,10 +16,13 @@ def is_vector(v: Any) -> TypeGuard[Vector]:
     return isinstance(v, Vector)
 
 
-Num: TypeAlias = int | float | NDArray[np.float64]
+Num: TypeAlias = int | float | np.float64
 
 
 class Vector:
+
+    # Without this numpy will use its own * operator implementation when multiplying with ndarrays and np.float64
+    __array_priority__ = 15.0   # > 10.0 to override np.matrix priority, > 0.0 to override ndarray priority
 
     def __init__(self, data: Any = 2) -> None:
         self.data: NDArray[np.float64]
@@ -80,10 +83,14 @@ class Vector:
         ...
 
     @overload
+    def __mul__(self, other: NDArray[np.float64]) -> float:
+        ...
+
+    @overload
     def __mul__(self, other: Num) -> Vector:
         ...
 
-    def __mul__(self, other: Num | Vector) -> Vector | float:
+    def __mul__(self, other: Num | Vector | NDArray[np.float64]) -> Vector | float:
         if is_num(other):
             return Vector(self.data * other)
         return self.dot(other)
@@ -93,13 +100,17 @@ class Vector:
         ...
 
     @overload
-    def __rmul__(self, other: Num) -> Vector:
+    def __rmul__(self, other: NDArray[np.float64]) -> float:
         ...
 
-    def __rmul__(self, other: Any) -> Vector | float:
+    @overload
+    def __rmul__(self, other: Num) -> Vector:   # type: ignore
+        ...
+
+    def __rmul__(self, other: Num | Vector | NDArray[np.float64]) -> Vector | float:    # type: ignore
         return self.__mul__(other)
 
-    def __truediv__(self, other: int | float) -> Vector:
+    def __truediv__(self, other: Num) -> Vector:
         if is_num(other):
             if other == 0:
                 raise ArithmeticError()
