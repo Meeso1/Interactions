@@ -9,7 +9,6 @@ from math_primitives.Vector import Vector, Vector2
 from type_declarations.Types import NumericStepFunc
 
 
-# TODO: Fix
 def make_field_vals(size: Tuple[float, float], res: Tuple[int, int],
                     func: Callable[[float, float], float]):
     cords = np.linspace(-size[0] / 2, size[0] / 2, res[0]), np.linspace(-size[1] / 2, size[1] / 2, res[1])
