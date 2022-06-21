@@ -9,5 +9,6 @@ class Vector2Type(ValueType):
         super(Vector2Type, self).__init__(
             name="Vector2",
             val_type=Vector,
+            checker=lambda val: isinstance(val, Vector) and len(val) == 2,
             zero=lambda: Vector(2)
         )
