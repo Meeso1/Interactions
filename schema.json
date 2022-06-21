@@ -1,0 +1,85 @@
+{
+  "$id": "https://example.com/simulation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Simulation",
+  "type": "object",
+  "properties": {
+    "balls": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/ball"}
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/field"}
+    },
+    "interactions": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/interaction"}
+    },
+    "border size": {"$ref": "#/$defs/vector"},
+    "border effect": {"enum": ["ignore", "stop", "repel"]},
+    "steps per second": {"type": "integer"},
+    "total time": {"type": "number"}
+  },
+  "$defs": {
+    "ball": {
+      "type": "object",
+      "properties": {
+        "position": {"$ref": "#/$defs/vector"},
+        "velocity": {"$ref": "#/$defs/vector"},
+        "attrs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string"},
+              "initial": {}
+            }
+          }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "properties": {
+        "type": {"type": "string"},
+        "values": {"type": "string"},
+        "size": {"$ref": "#/$defs/vector"},
+        "resolution": {"$ref": "#/$defs/intPair"},
+        "const": {"type": "boolean"}
+      }
+    },
+    "interaction": {
+      "type": "object",
+      "properties": {
+        "source": {"type": "string"},
+        "target": {"type": "string"},
+        "attribute": {"type": "string"},
+        "radius": {"type": "number"},
+        "select func": {"type": "string"},
+        "formula": {
+          "type": "object",
+          "properties": {
+            "bindings": {
+              "type": "object",
+              "additionalProperties": {"type": ["string", "number"]}
+            },
+            "expression": {"type": "string"}
+          }
+        }
+      }
+    },
+    "vector": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "intPair": {
+      "type": "array",
+      "items": {"type": "integer"},
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

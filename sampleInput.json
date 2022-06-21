@@ -1,0 +1,59 @@
+{
+  "balls": [
+    {
+      "position": [-4, 0],
+      "velocity": [2, 0],
+      "attrs": {
+        "charge": {
+          "type": "float",
+          "initial": -1
+        }
+      }
+    }
+  ],
+  "fields": {
+    "potential": {
+      "type": "positive",
+      "values": "x*exp(-(x-1)^2-(y+0.5)^2) + y^2",
+      "size": [16, 16],
+      "resolution": [25, 50],
+      "const": true
+    }
+  },
+  "interactions": {
+    "charge repulsion": {
+      "source": "Ball",
+      "target": "Ball",
+      "attribute": "velocity",
+      "formula": {
+        "bindings": {
+          "q_1": "target.charge",
+          "q_2": "source.charge",
+          "r": "distance(target, source)",
+          "R": "target.towards(source)",
+          "k": 0.0026
+        },
+        "expression": "-k*q_1*q_2/r^2*R"
+      },
+      "radius": 20,
+      "select func": "KDTree"
+    },
+    "potential gradient force": {
+      "source": "potential",
+      "target": "Ball",
+      "attribute": "velocity",
+      "formula": {
+        "bindings": {
+          "v": "source.gradient",
+          "r": "target.position",
+          "q": "target.charge"
+        },
+        "expression": "-q*v(r)"
+      }
+    }
+  },
+  "border size": [20, 20],
+  "border effect": "ignore",
+  "steps per second": 100,
+  "total time": 15
+}
