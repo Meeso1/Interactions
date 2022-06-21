@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from type_declarations.Types import *
-from math_primitives.FieldValueRepr import ValueFunc
+from data_types.FieldValueRepr import ValueFunc
 
 
 class FieldStepMethod(ABC):

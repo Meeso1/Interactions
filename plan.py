@@ -1,9 +1,9 @@
 from __future__ import annotations
 import numpy as np
-from typing import List, Dict, Tuple, Optional, Callable, Union, Any, TypeAlias
+from typing import List, Dict, Tuple, Callable, Any, TypeAlias
 from scipy import spatial
-from math_primitives import FieldValueRepr
-from math_primitives.FieldValueRepr import CordVal, Values
+from data_types import FieldValueRepr
+from data_types.FieldValueRepr import CordVal, Values
 from numpy.typing import NDArray
 
 

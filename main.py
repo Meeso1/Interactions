@@ -1,9 +1,9 @@
 from __future__ import annotations
 from Simulation import *
 from utility import *
-from math_primitives.ExpSplineFieldRepr import ExpSplineFieldRepr
-from math_primitives.NumericStepFunctions import Method3212, Euler, AdamsBashford5, AdamsMoulton5
-from math_primitives.SplineFieldRepr import SplineFieldRepr
+from data_types.ExpSplineFieldRepr import ExpSplineFieldRepr
+from math_primitives.NumericStepFunctions import Euler
+from data_types.SplineFieldRepr import SplineFieldRepr
 from math_primitives.Vector import Vector
 
 

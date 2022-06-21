@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal
 import pygame as pg
 from BFIClasses import *
-from math_primitives.SplineFieldRepr import SplineFieldRepr
+from data_types.SplineFieldRepr import SplineFieldRepr
 
 n: int = 20         # Field resolution (represented as n x n x n array)
 width: float = 100  # Field width
@@ -22,8 +22,8 @@ class Simulation:
                  start_time: float = 0,
                  total_time: float = 100):
 
-        self.field_res: Tuple[int, int] = field_res
-        self.field_size: Tuple[float, float] = field_size
+        self.field_res: Tuple[int, int] = field_res         # unused
+        self.field_size: Tuple[float, float] = field_size   # used only for border field
 
         self.border_size: Tuple[float, float]
         if border_size == "auto":

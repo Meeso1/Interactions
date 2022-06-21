@@ -2,9 +2,9 @@ from typing import Tuple, Callable, Dict
 import numpy as np
 from BFIClasses import Ball, Field
 from data_types.PrimaryData import PrimaryDataNumeric
-from math_primitives.ExpSplineFieldRepr import ExpSplineFieldRepr
+from data_types.ExpSplineFieldRepr import ExpSplineFieldRepr
 from math_primitives.NumericStepFunctions import Euler
-from math_primitives.SplineFieldRepr import SplineFieldRepr
+from data_types.SplineFieldRepr import SplineFieldRepr
 from math_primitives.Vector import Vector, Vector2
 from type_declarations.Types import NumericStepFunc
 

@@ -8,7 +8,7 @@ from data_types.TimeVariantData import CompoundData, CompoundDataDerivative
 from math_primitives.FieldStepFunctions import EulerField
 from math_primitives.QuarticSplineGenerator import QuarticSplineGenerator
 from math_primitives.Vector import *
-from math_primitives.FieldValueRepr import FieldValueRepr
+from data_types.FieldValueRepr import FieldValueRepr
 from data_types.PrimaryData import PrimaryData, PrimaryDataNumeric
 from type_declarations.Types import *
 from numpy.typing import NDArray

@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import final, Any, Tuple
 from type_declarations.Arithmetic import Arithmetic
-from .Vector import Vector2
+from math_primitives.Vector import Vector2
 from type_declarations.Types import *
 
 
