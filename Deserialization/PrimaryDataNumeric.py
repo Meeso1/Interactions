@@ -5,7 +5,6 @@ from data_types.PrimaryData import PrimaryDataNumeric
 from .ValueTypes.ValueType import ValueType
 
 
-# TODO: data types may have to be deserialized. Where should this deserialization be implemented?
 def deserialize(json_object: Any, validated: bool = False) -> PrimaryDataNumeric:
     if not validated:
         if not valid(json_object):
@@ -15,8 +14,10 @@ def deserialize(json_object: Any, validated: bool = False) -> PrimaryDataNumeric
     
     return PrimaryDataNumeric(
         val_type=data_type.type,
-        initial=json_object["initial"],
-        zero=data_type.zero
+        initial=data_type.type.deserialize(json_object["initial"]),
+        zero=data_type.zero,
+        initial_derivative=data_type.type.deserialize(json_object["initial_derivative"])
+        if "initial_derivative" in json_object else data_type.zero()
     )
 
 

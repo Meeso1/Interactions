@@ -1,12 +1,13 @@
 from __future__ import annotations
-from type_declarations import *
-from typing import TypeVar, Generic, Callable, Type, Any, Dict
 
-T = TypeVar("T")
+from Deserialization.Deserializable import Deserializable
+from type_declarations import *
+from typing import TypeVar, Generic, Callable, Type, Any, Dict, Iterable
+
+T = TypeVar("T", bound=Deserializable)
 
 
 class ValueType(Generic[T]):
-
     types: Dict[str, ValueType] = {}
 
     def __init__(self, name: str, val_type: Type[T], checker: Callable[[Any], bool], zero: Callable[[], T]):
